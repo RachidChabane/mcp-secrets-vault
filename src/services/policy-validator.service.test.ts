@@ -278,6 +278,38 @@ describe('PolicyValidatorService', () => {
       expect(() => validator.validateAll(policies)).toThrow(TEXT.ERROR_DUPLICATE_POLICY);
     });
 
+    it('should reject duplicate secret IDs ignoring surrounding spaces', () => {
+      const policies: PolicyConfig[] = [
+        {
+          secretId: '  apiKey  ',
+          allowedActions: ['http_get'],
+          allowedDomains: ['api1.example.com']
+        },
+        {
+          secretId: 'apiKey',
+          allowedActions: ['http_post'],
+          allowedDomains: ['api2.example.com']
+        }
+      ];
+
+      expect(() => validator.validateAll(policies)).toThrow(TEXT.ERROR_DUPLICATE_POLICY);
+
+      const policiesReversed: PolicyConfig[] = [
+        {
+          secretId: 'apiKey',
+          allowedActions: ['http_get'],
+          allowedDomains: ['api1.example.com']
+        },
+        {
+          secretId: '  apiKey  ',
+          allowedActions: ['http_post'],
+          allowedDomains: ['api2.example.com']
+        }
+      ];
+
+      expect(() => validator.validateAll(policiesReversed)).toThrow(TEXT.ERROR_DUPLICATE_POLICY);
+    });
+
     it('should clear seen IDs between validateAll calls', () => {
       const policies1: PolicyConfig[] = [
         {

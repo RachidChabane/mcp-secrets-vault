@@ -143,12 +143,12 @@ describe('PolicyLoaderService', () => {
       expect(mockReadFile).toHaveBeenCalledWith('custom/path.json', CONFIG.DEFAULT_ENCODING);
     });
 
-    it('should normalize actions to lowercase', async () => {
+    it('should normalize, deduplicate, and sort actions and domains', async () => {
       const policies = [
         {
           secretId: 'test',
-          allowedActions: ['HTTP_GET', 'Http_Post', 'HTTP_post'],
-          allowedDomains: ['api.example.com']
+          allowedActions: ['HTTP_GET', 'Http_Post', 'HTTP_post', ' http_get ', 'http_GET'],
+          allowedDomains: ['API.example.com', ' api.EXAMPLE.com ', 'test.example.com', 'api.example.com']
         }
       ];
 
@@ -156,7 +156,11 @@ describe('PolicyLoaderService', () => {
 
       const result = await loader.loadPolicies();
 
-      expect(result[0]?.allowedActions).toEqual(['http_get', 'http_post', 'http_post']);
+      // Actions should be deduplicated, lowercased, and sorted
+      expect(result[0]?.allowedActions).toEqual(['http_get', 'http_post']);
+      
+      // Domains should be deduplicated, lowercased, and sorted
+      expect(result[0]?.allowedDomains).toEqual(['api.example.com', 'test.example.com']);
     });
 
     it('should handle missing arrays gracefully', async () => {
@@ -175,12 +179,12 @@ describe('PolicyLoaderService', () => {
       expect(result[0]?.allowedDomains).toEqual([]);
     });
 
-    it('should deeply freeze arrays to prevent mutation', async () => {
+    it('should deeply freeze normalized arrays to prevent mutation', async () => {
       const policies: PolicyConfig[] = [
         {
           secretId: 'test',
-          allowedActions: ['http_get'],
-          allowedDomains: ['api.example.com']
+          allowedActions: ['HTTP_GET', 'http_get', ' Http_Post '],
+          allowedDomains: ['API.example.com', 'test.example.com']
         }
       ];
 
@@ -189,9 +193,13 @@ describe('PolicyLoaderService', () => {
       const result = await loader.loadPolicies();
       const policy = result[0];
 
-      // Test that arrays are frozen
+      // Test that deduplicated/sorted arrays are frozen
       expect(Object.isFrozen(policy?.allowedActions)).toBe(true);
       expect(Object.isFrozen(policy?.allowedDomains)).toBe(true);
+      
+      // Verify they're normalized
+      expect(policy?.allowedActions).toEqual(['http_get', 'http_post']);
+      expect(policy?.allowedDomains).toEqual(['api.example.com', 'test.example.com']);
 
       // Test that push/splice/index assignment fail
       expect(() => {

@@ -37,19 +37,26 @@ export class PolicyLoaderService implements PolicyLoader {
   }
 
   private freezePolicy(policy: any): PolicyConfig {
-    // Normalize actions to lowercase canonical form
+    // Normalize actions and domains: trim, lowercase, deduplicate, sort
+    const normalizeList = (items: any[]): readonly string[] => {
+      if (!Array.isArray(items)) return Object.freeze([]);
+      
+      const normalized = new Set<string>();
+      for (const item of items) {
+        const trimmed = item?.toString()?.trim()?.toLowerCase();
+        if (trimmed) {
+          normalized.add(trimmed);
+        }
+      }
+      
+      // Convert to array and sort for deterministic order
+      return Object.freeze(Array.from(normalized).sort());
+    };
+    
     const frozen: any = {
       secretId: policy.secretId?.trim(),
-      allowedActions: Object.freeze(
-        Array.isArray(policy.allowedActions) 
-          ? policy.allowedActions.map((a: any) => a?.trim()?.toLowerCase())
-          : []
-      ),
-      allowedDomains: Object.freeze(
-        Array.isArray(policy.allowedDomains)
-          ? policy.allowedDomains.map((d: any) => d?.trim())
-          : []
-      ),
+      allowedActions: normalizeList(policy.allowedActions),
+      allowedDomains: normalizeList(policy.allowedDomains),
     };
     
     if (policy.rateLimit) {

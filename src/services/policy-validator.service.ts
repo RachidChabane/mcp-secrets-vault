@@ -26,11 +26,14 @@ export class PolicyValidatorService implements PolicyValidator {
     for (const policy of policies) {
       this.validate(policy);
       
-      if (this.seenSecretIds.has(policy.secretId)) {
+      const trimmedId = policy.secretId?.trim();
+      if (trimmedId && this.seenSecretIds.has(trimmedId)) {
         throw new Error(TEXT.ERROR_DUPLICATE_POLICY);
       }
       
-      this.seenSecretIds.add(policy.secretId);
+      if (trimmedId) {
+        this.seenSecretIds.add(trimmedId);
+      }
     }
   }
 
