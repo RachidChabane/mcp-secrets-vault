@@ -13,6 +13,12 @@ export const TEXT = {
   ERROR_INVALID_ACTION: 'Action not allowed',
   ERROR_INVALID_DOMAIN: 'Invalid domain format',
   ERROR_INVALID_CONFIG: 'Invalid configuration',
+  ERROR_DUPLICATE_SECRET_ID: 'Duplicate secret ID',
+  ERROR_INVALID_SECRET_ID_FORMAT: 'Invalid secret ID format',
+  ERROR_INVALID_ENV_VAR_FORMAT: 'Invalid environment variable format',
+  ERROR_SECRET_ID_TOO_LONG: 'Secret ID exceeds maximum length',
+  ERROR_SECRET_ID_TOO_SHORT: 'Secret ID is too short',
+  ERROR_ENV_VAR_TOO_SHORT: 'Environment variable name is too short',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',

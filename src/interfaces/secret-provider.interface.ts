@@ -1,8 +1,11 @@
-import { SecretMapping } from './secret-mapping.interface.js';
+export interface SecretInfo {
+  readonly secretId: string;
+  readonly available: boolean;
+  readonly description?: string;
+}
 
 export interface SecretProvider {
-  getSecretValue(secretId: string): string | undefined;
+  listSecretIds(): readonly string[];
   isSecretAvailable(secretId: string): boolean;
-  listAvailableSecrets(): string[];
-  getSecretMapping(secretId: string): SecretMapping | undefined;
+  getSecretInfo(secretId: string): SecretInfo | undefined;
 }

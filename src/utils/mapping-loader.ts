@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { SecretMapping } from '../interfaces/secret-mapping.interface.js';
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
+import { ConfigurationError } from './errors.js';
 
 const SecretMappingSchema = z.object({
-  secretId: z.string().min(1).max(CONFIG.MAX_SECRET_ID_LENGTH),
-  envVar: z.string().min(1),
-  description: z.string().optional()
+  secretId: z.string().trim().min(CONFIG.MIN_SECRET_ID_LENGTH).max(CONFIG.MAX_SECRET_ID_LENGTH),
+  envVar: z.string().trim().min(CONFIG.MIN_ENV_VAR_LENGTH),
+  description: z.string().trim().optional()
 });
 
 const MappingsFileSchema = z.object({
@@ -24,25 +25,36 @@ export class MappingLoader {
       return validated.mappings;
     } catch (error) {
       if (error instanceof z.ZodError) {
-        throw new Error(TEXT.ERROR_INVALID_CONFIG);
+        const field = error.errors[0]?.path.join('.');
+        throw new ConfigurationError(TEXT.ERROR_INVALID_CONFIG, field);
       }
-      throw new Error(TEXT.ERROR_INVALID_CONFIG);
+      if (error instanceof SyntaxError) {
+        throw new ConfigurationError(TEXT.ERROR_INVALID_CONFIG);
+      }
+      throw new ConfigurationError(TEXT.ERROR_INVALID_CONFIG);
     }
   }
 
   loadFromEnvironment(): SecretMapping[] {
     const envPrefix = CONFIG.ENV_PREFIX;
     const mappings: SecretMapping[] = [];
+    const mappingSuffix = '_MAPPING';
     
     for (const [key, value] of Object.entries(process.env)) {
-      if (key.startsWith(envPrefix) && key.endsWith('_MAPPING')) {
-        try {
-          const mapping = JSON.parse(value || '{}');
-          const validated = SecretMappingSchema.parse(mapping);
-          mappings.push(validated);
-        } catch {
-          continue;
-        }
+      if (!key.startsWith(envPrefix) || !key.endsWith(mappingSuffix)) {
+        continue;
+      }
+      
+      if (!value || value.trim().length === 0) {
+        continue;
+      }
+      
+      try {
+        const mapping = JSON.parse(value);
+        const validated = SecretMappingSchema.parse(mapping);
+        mappings.push(validated);
+      } catch {
+        continue;
       }
     }
     

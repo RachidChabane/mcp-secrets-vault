@@ -40,6 +40,10 @@ export const CONFIG = {
   MAX_DOMAIN_LENGTH: 253,
   MAX_ACTION_LENGTH: 50,
   MAX_REASON_LENGTH: 500,
+  SECRET_ID_REGEX: /^[a-zA-Z0-9_-]+$/,
+  ENV_VAR_REGEX: /^[A-Z][A-Z0-9_]*$/,
+  MIN_SECRET_ID_LENGTH: 1,
+  MIN_ENV_VAR_LENGTH: 1,
   
   // File paths
   DEFAULT_CONFIG_FILE: 'vault.config.json',

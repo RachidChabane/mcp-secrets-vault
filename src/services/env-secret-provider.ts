@@ -1,68 +1,97 @@
-import { SecretProvider } from '../interfaces/secret-provider.interface.js';
+import { SecretProvider, SecretInfo } from '../interfaces/secret-provider.interface.js';
+import { SecretAccessor } from '../interfaces/secret-accessor.interface.js';
 import { SecretMapping } from '../interfaces/secret-mapping.interface.js';
 import { TEXT } from '../constants/text-constants.js';
-import { CONFIG } from '../constants/config-constants.js';
+import { ConfigurationError } from '../utils/errors.js';
+import { validateSecretId, validateEnvVar, isNonEmptyString } from '../utils/validation.js';
 
-export class EnvSecretProvider implements SecretProvider {
-  private mappings: Map<string, SecretMapping>;
+interface ValidatedMapping {
+  readonly secretId: string;
+  readonly envVar: string;
+  readonly description?: string;
+}
+
+export class EnvSecretProvider implements SecretProvider, SecretAccessor {
+  private readonly mappings: ReadonlyMap<string, ValidatedMapping>;
+  private readonly secretIds: readonly string[];
 
   constructor(mappings: SecretMapping[]) {
-    this.mappings = new Map();
-    this.loadMappings(mappings);
+    const validated = this.validateAndNormalizeMappings(mappings);
+    this.mappings = Object.freeze(new Map(validated));
+    this.secretIds = Object.freeze(Array.from(this.mappings.keys()).sort());
   }
 
-  private loadMappings(mappings: SecretMapping[]): void {
+  private validateAndNormalizeMappings(
+    mappings: SecretMapping[]
+  ): Array<[string, ValidatedMapping]> {
+    const seen = new Set<string>();
+    const result: Array<[string, ValidatedMapping]> = [];
+
     for (const mapping of mappings) {
-      this.validateMapping(mapping);
-      this.mappings.set(mapping.secretId, mapping);
-    }
-  }
-
-  private validateMapping(mapping: SecretMapping): void {
-    if (!mapping.secretId) {
-      throw new Error(TEXT.VALIDATION_REQUIRED_FIELD);
-    }
-    if (!mapping.envVar) {
-      throw new Error(TEXT.VALIDATION_REQUIRED_FIELD);
-    }
-    if (mapping.secretId.length > CONFIG.MAX_SECRET_ID_LENGTH) {
-      throw new Error(TEXT.VALIDATION_INVALID_FORMAT);
-    }
-  }
-
-  getSecretValue(secretId: string): string | undefined {
-    const mapping = this.mappings.get(secretId);
-    if (!mapping) {
-      return undefined;
+      const secretId = validateSecretId(mapping.secretId);
+      const envVar = validateEnvVar(mapping.envVar);
+      
+      if (seen.has(secretId)) {
+        throw new ConfigurationError(
+          TEXT.ERROR_DUPLICATE_SECRET_ID,
+          TEXT.FIELD_SECRET_ID
+        );
+      }
+      
+      seen.add(secretId);
+      
+      const validated: ValidatedMapping = Object.freeze({
+        secretId,
+        envVar,
+        description: mapping.description?.trim()
+      });
+      
+      result.push([secretId, validated]);
     }
     
-    const value = process.env[mapping.envVar];
-    return value;
+    return result;
+  }
+
+  listSecretIds(): readonly string[] {
+    return this.secretIds;
   }
 
   isSecretAvailable(secretId: string): boolean {
-    const mapping = this.mappings.get(secretId);
+    const normalizedId = secretId.trim();
+    const mapping = this.mappings.get(normalizedId);
+    
     if (!mapping) {
       return false;
     }
     
     const value = process.env[mapping.envVar];
-    return value !== undefined && value !== '';
+    return isNonEmptyString(value);
   }
 
-  listAvailableSecrets(): string[] {
-    const available: string[] = [];
+  getSecretInfo(secretId: string): SecretInfo | undefined {
+    const normalizedId = secretId.trim();
+    const mapping = this.mappings.get(normalizedId);
     
-    for (const [secretId] of this.mappings) {
-      if (this.isSecretAvailable(secretId)) {
-        available.push(secretId);
-      }
+    if (!mapping) {
+      return undefined;
     }
     
-    return available.sort();
+    return Object.freeze({
+      secretId: mapping.secretId,
+      available: this.isSecretAvailable(normalizedId),
+      description: mapping.description
+    });
   }
 
-  getSecretMapping(secretId: string): SecretMapping | undefined {
-    return this.mappings.get(secretId);
+  getSecretValue(secretId: string): string | undefined {
+    const normalizedId = secretId.trim();
+    const mapping = this.mappings.get(normalizedId);
+    
+    if (!mapping) {
+      return undefined;
+    }
+    
+    const value = process.env[mapping.envVar];
+    return isNonEmptyString(value) ? value : undefined;
   }
 }
