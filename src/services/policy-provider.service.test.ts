@@ -65,7 +65,8 @@ describe('PolicyProviderService', () => {
       const result = provider.evaluate('test-key', 'http_get', 'api.test.com');
       
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe('Policies not loaded');
+      expect(result.code).toBe('policies_not_loaded');
+      expect(result.message).toBe('Policies not loaded');
     });
 
     it('should deny unknown secrets after loading', async () => {

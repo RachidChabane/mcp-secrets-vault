@@ -76,7 +76,7 @@ describe('PolicyLoaderService', () => {
       const result = await loader.loadPolicies();
 
       expect(result[0]?.secretId).toBe('test-secret');
-      expect(result[0]?.allowedActions).toEqual(['http_get', 'http_post']);
+      expect(result[0]?.allowedActions).toEqual(['http_get', 'http_post']); // normalized to lowercase
       expect(result[0]?.allowedDomains).toEqual(['api.example.com']);
       expect(result[0]?.expiresAt).toBe('2024-12-31T23:59:59Z');
     });
@@ -130,6 +130,38 @@ describe('PolicyLoaderService', () => {
       await customLoader.loadPolicies();
 
       expect(mockReadFile).toHaveBeenCalledWith('custom/path.json', 'utf-8');
+    });
+
+    it('should normalize actions to lowercase', async () => {
+      const policies = [
+        {
+          secretId: 'test',
+          allowedActions: ['HTTP_GET', 'Http_Post', 'HTTP_post'],
+          allowedDomains: ['api.example.com']
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      expect(result[0]?.allowedActions).toEqual(['http_get', 'http_post', 'http_post']);
+    });
+
+    it('should handle missing arrays gracefully', async () => {
+      const policies = [
+        {
+          secretId: 'test',
+          // Missing allowedActions and allowedDomains
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      expect(result[0]?.allowedActions).toEqual([]);
+      expect(result[0]?.allowedDomains).toEqual([]);
     });
   });
 });

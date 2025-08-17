@@ -13,7 +13,8 @@ export interface PolicyConfig {
 
 export interface PolicyEvaluationResult {
   allowed: boolean;
-  reason?: string;
+  code?: string;
+  message?: string;
 }
 
 export interface PolicyLoader {

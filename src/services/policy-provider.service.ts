@@ -9,6 +9,8 @@ import {
 import { PolicyLoaderService } from './policy-loader.service.js';
 import { PolicyValidatorService } from './policy-validator.service.js';
 import { PolicyEvaluatorService } from './policy-evaluator.service.js';
+import { CONFIG } from '../constants/config-constants.js';
+import { TEXT } from '../constants/text-constants.js';
 
 export class PolicyProviderService implements PolicyProvider {
   private loader: PolicyLoader;
@@ -34,7 +36,8 @@ export class PolicyProviderService implements PolicyProvider {
     if (!this.evaluator) {
       return {
         allowed: false,
-        reason: 'Policies not loaded'
+        code: CONFIG.ERROR_CODE_POLICIES_NOT_LOADED,
+        message: TEXT.ERROR_POLICIES_NOT_LOADED
       };
     }
     

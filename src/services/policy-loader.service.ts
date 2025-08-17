@@ -9,13 +9,14 @@ export class PolicyLoaderService implements PolicyLoader {
   async loadPolicies(): Promise<PolicyConfig[]> {
     try {
       const content = await fs.readFile(this.policiesPath, 'utf-8');
-      const data = JSON.parse(content);
+      const data: unknown = JSON.parse(content);
       
       if (!Array.isArray(data)) {
         throw new Error(TEXT.ERROR_INVALID_CONFIG);
       }
       
-      return data.map(policy => this.freezePolicy(policy));
+      // Type assertion only after array check
+      return (data as unknown[]).map(policy => this.freezePolicy(policy as any));
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         return [];
@@ -29,11 +30,16 @@ export class PolicyLoaderService implements PolicyLoader {
     }
   }
 
-  private freezePolicy(policy: PolicyConfig): PolicyConfig {
+  private freezePolicy(policy: any): PolicyConfig {
+    // Normalize actions to lowercase canonical form
     const frozen: PolicyConfig = {
       secretId: policy.secretId?.trim(),
-      allowedActions: policy.allowedActions?.map(a => a?.trim()),
-      allowedDomains: policy.allowedDomains?.map(d => d?.trim()),
+      allowedActions: Array.isArray(policy.allowedActions) 
+        ? policy.allowedActions.map((a: any) => a?.trim()?.toLowerCase())
+        : [],
+      allowedDomains: Array.isArray(policy.allowedDomains)
+        ? policy.allowedDomains.map((d: any) => d?.trim())
+        : [],
     };
     
     if (policy.rateLimit) {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PolicyEvaluatorService } from './policy-evaluator.service.js';
 import { PolicyConfig } from '../interfaces/policy.interface.js';
+import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
 
 describe('PolicyEvaluatorService', () => {
@@ -40,7 +41,8 @@ describe('PolicyEvaluatorService', () => {
       const result = evaluator.evaluate('openai-key', 'http_get', 'api.openai.com');
       
       expect(result.allowed).toBe(true);
-      expect(result.reason).toBeUndefined();
+      expect(result.code).toBeUndefined();
+      expect(result.message).toBeUndefined();
     });
 
     it('should allow request with different case domain', () => {
@@ -59,21 +61,24 @@ describe('PolicyEvaluatorService', () => {
       const result = evaluator.evaluate('', 'http_get', 'api.openai.com');
       
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe(TEXT.ERROR_INVALID_SECRET_ID_FORMAT);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_REQUEST);
     });
 
     it('should deny request when policy not found', () => {
       const result = evaluator.evaluate('unknown-key', 'http_get', 'api.example.com');
       
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe(TEXT.ERROR_POLICY_NOT_FOUND);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_NO_POLICY);
+      expect(result.message).toBe(TEXT.ERROR_POLICY_NOT_FOUND);
     });
 
     it('should deny request when policy is expired', () => {
       const result = evaluator.evaluate('expired-key', 'http_get', 'api.example.com');
       
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe(TEXT.ERROR_POLICY_EXPIRED);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_POLICY_EXPIRED);
+      expect(result.message).toBe(TEXT.ERROR_POLICY_EXPIRED);
     });
 
     it('should allow request when policy not expired', () => {
@@ -86,24 +91,28 @@ describe('PolicyEvaluatorService', () => {
       const result = evaluator.evaluate('github-token', 'http_post', 'api.github.com');
       
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe(TEXT.ERROR_FORBIDDEN_ACTION);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_FORBIDDEN_ACTION);
+      expect(result.message).toBe(TEXT.ERROR_FORBIDDEN_ACTION);
     });
 
     it('should deny request with forbidden domain', () => {
       const result = evaluator.evaluate('openai-key', 'http_get', 'api.evil.com');
       
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_FORBIDDEN_DOMAIN);
+      expect(result.message).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
     });
 
     it('should perform exact domain matching (no wildcards)', () => {
       const result1 = evaluator.evaluate('openai-key', 'http_get', 'sub.api.openai.com');
       expect(result1.allowed).toBe(false);
-      expect(result1.reason).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
+      expect(result1.code).toBe(CONFIG.ERROR_CODE_FORBIDDEN_DOMAIN);
+      expect(result1.message).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
       
       const result2 = evaluator.evaluate('openai-key', 'http_get', 'openai.com');
       expect(result2.allowed).toBe(false);
-      expect(result2.reason).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
+      expect(result2.code).toBe(CONFIG.ERROR_CODE_FORBIDDEN_DOMAIN);
+      expect(result2.message).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
     });
 
     it('should handle multiple allowed domains', () => {
@@ -120,6 +129,53 @@ describe('PolicyEvaluatorService', () => {
       
       const result2 = evaluator.evaluate('openai-key', 'http_post', 'api.openai.com');
       expect(result2.allowed).toBe(true);
+    });
+
+    it('should normalize action to lowercase', () => {
+      const result1 = evaluator.evaluate('openai-key', 'HTTP_GET', 'api.openai.com');
+      expect(result1.allowed).toBe(true);
+      
+      const result2 = evaluator.evaluate('openai-key', 'Http_Post', 'api.openai.com');
+      expect(result2.allowed).toBe(true);
+    });
+
+    it('should deny unsupported actions', () => {
+      const result = evaluator.evaluate('openai-key', 'http_delete', 'api.openai.com');
+      
+      expect(result.allowed).toBe(false);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_FORBIDDEN_ACTION);
+      expect(result.message).toBe(TEXT.ERROR_UNSUPPORTED_ACTION);
+    });
+
+    it('should treat expiresAt === now as expired', () => {
+      const now = new Date();
+      const nowPolicy: PolicyConfig = {
+        secretId: 'now-key',
+        allowedActions: ['http_get'],
+        allowedDomains: ['api.example.com'],
+        expiresAt: now.toISOString()
+      };
+      
+      const nowEvaluator = new PolicyEvaluatorService([nowPolicy]);
+      const result = nowEvaluator.evaluate('now-key', 'http_get', 'api.example.com');
+      
+      expect(result.allowed).toBe(false);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_POLICY_EXPIRED);
+      expect(result.message).toBe(TEXT.ERROR_POLICY_EXPIRED);
+    });
+
+    it('should return invalid request for missing inputs', () => {
+      const result1 = evaluator.evaluate('', '', '');
+      expect(result1.allowed).toBe(false);
+      expect(result1.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+      
+      const result2 = evaluator.evaluate('openai-key', '', 'api.openai.com');
+      expect(result2.allowed).toBe(false);
+      expect(result2.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+      
+      const result3 = evaluator.evaluate('openai-key', 'http_get', '');
+      expect(result3.allowed).toBe(false);
+      expect(result3.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
     });
   });
 
@@ -181,7 +237,8 @@ describe('PolicyEvaluatorService', () => {
       
       const result = emptyEvaluator.evaluate('any', 'http_get', 'example.com');
       expect(result.allowed).toBe(false);
-      expect(result.reason).toBe(TEXT.ERROR_POLICY_NOT_FOUND);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_NO_POLICY);
+      expect(result.message).toBe(TEXT.ERROR_POLICY_NOT_FOUND);
     });
 
     it('should handle default empty constructor', () => {

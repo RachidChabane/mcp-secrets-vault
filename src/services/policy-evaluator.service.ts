@@ -1,4 +1,5 @@
 import { PolicyConfig, PolicyEvaluator, PolicyEvaluationResult } from '../interfaces/policy.interface.js';
+import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
 
 export class PolicyEvaluatorService implements PolicyEvaluator {
@@ -12,13 +13,26 @@ export class PolicyEvaluatorService implements PolicyEvaluator {
 
   evaluate(secretId: string, action: string, domain: string): PolicyEvaluationResult {
     const trimmedSecretId = secretId?.trim();
-    const trimmedAction = action?.trim();
     const trimmedDomain = domain?.trim()?.toLowerCase();
     
-    if (!trimmedSecretId) {
+    // Normalize action to canonical form (lowercase, trimmed)
+    const normalizedAction = action?.trim()?.toLowerCase();
+    
+    if (!trimmedSecretId || !normalizedAction || !trimmedDomain) {
       return {
         allowed: false,
-        reason: TEXT.ERROR_INVALID_SECRET_ID_FORMAT
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST,
+        message: TEXT.ERROR_INVALID_REQUEST
+      };
+    }
+    
+    // Validate action is in supported actions
+    const supportedActions = CONFIG.SUPPORTED_ACTIONS as readonly string[];
+    if (!supportedActions.includes(normalizedAction)) {
+      return {
+        allowed: false,
+        code: CONFIG.ERROR_CODE_FORBIDDEN_ACTION,
+        message: TEXT.ERROR_UNSUPPORTED_ACTION
       };
     }
     
@@ -27,24 +41,29 @@ export class PolicyEvaluatorService implements PolicyEvaluator {
     if (!policy) {
       return {
         allowed: false,
-        reason: TEXT.ERROR_POLICY_NOT_FOUND
+        code: CONFIG.ERROR_CODE_NO_POLICY,
+        message: TEXT.ERROR_POLICY_NOT_FOUND
       };
     }
     
     if (policy.expiresAt) {
       const expirationDate = new Date(policy.expiresAt);
-      if (expirationDate < new Date()) {
+      const now = new Date();
+      // Treat expiresAt === now as expired
+      if (expirationDate <= now) {
         return {
           allowed: false,
-          reason: TEXT.ERROR_POLICY_EXPIRED
+          code: CONFIG.ERROR_CODE_POLICY_EXPIRED,
+          message: TEXT.ERROR_POLICY_EXPIRED
         };
       }
     }
     
-    if (!policy.allowedActions.includes(trimmedAction)) {
+    if (!policy.allowedActions.includes(normalizedAction)) {
       return {
         allowed: false,
-        reason: TEXT.ERROR_FORBIDDEN_ACTION
+        code: CONFIG.ERROR_CODE_FORBIDDEN_ACTION,
+        message: TEXT.ERROR_FORBIDDEN_ACTION
       };
     }
     
@@ -55,7 +74,8 @@ export class PolicyEvaluatorService implements PolicyEvaluator {
     if (!domainAllowed) {
       return {
         allowed: false,
-        reason: TEXT.ERROR_FORBIDDEN_DOMAIN
+        code: CONFIG.ERROR_CODE_FORBIDDEN_DOMAIN,
+        message: TEXT.ERROR_FORBIDDEN_DOMAIN
       };
     }
     

@@ -31,6 +31,7 @@ export const TEXT = {
   ERROR_EMPTY_ALLOWED_DOMAINS: 'Allowed domains cannot be empty',
   ERROR_DUPLICATE_POLICY: 'Duplicate policy for secret ID',
   ERROR_UNSUPPORTED_ACTION: 'Unsupported action',
+  ERROR_POLICIES_NOT_LOADED: 'Policies not loaded',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',
