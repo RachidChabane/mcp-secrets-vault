@@ -7,7 +7,10 @@ export class PolicyEvaluatorService implements PolicyEvaluator {
 
   constructor(policies: PolicyConfig[] = []) {
     for (const policy of policies) {
-      this.policies.set(policy.secretId, policy);
+      const trimmedKey = policy.secretId?.trim();
+      if (trimmedKey) {
+        this.policies.set(trimmedKey, policy);
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
+import path from 'path';
 import { PolicyLoaderService } from './policy-loader.service.js';
 import { PolicyConfig } from '../interfaces/policy.interface.js';
 import { CONFIG } from '../constants/config-constants.js';
@@ -16,11 +17,20 @@ describe('PolicyLoaderService', () => {
   const mockReadFile = fs.readFile as any;
 
   beforeEach(() => {
-    loader = new PolicyLoaderService('policies.json');
+    loader = new PolicyLoaderService();
     vi.clearAllMocks();
   });
 
   describe('loadPolicies', () => {
+    it('should use default joined path when not provided', async () => {
+      const expectedPath = path.join(CONFIG.DEFAULT_POLICIES_DIR, CONFIG.DEFAULT_POLICIES_FILE);
+      mockReadFile.mockResolvedValue('[]');
+
+      await loader.loadPolicies();
+
+      expect(mockReadFile).toHaveBeenCalledWith(expectedPath, CONFIG.DEFAULT_ENCODING);
+    });
+
     it('should load and parse valid policies', async () => {
       const policies: PolicyConfig[] = [
         {
@@ -42,7 +52,7 @@ describe('PolicyLoaderService', () => {
 
     it('should return empty array when file does not exist', async () => {
       const error = new Error('File not found') as any;
-      error.code = 'ENOENT';
+      error.code = CONFIG.FS_ERROR_ENOENT;
       mockReadFile.mockRejectedValue(error);
 
       const result = await loader.loadPolicies();

@@ -246,5 +246,29 @@ describe('PolicyEvaluatorService', () => {
       
       expect(defaultEvaluator.hasPolicy('any')).toBe(false);
     });
+
+    it('should trim secretId keys when storing policies', () => {
+      const policiesWithSpaces: PolicyConfig[] = [
+        {
+          secretId: '  trimmed-key  ',
+          allowedActions: ['http_get'],
+          allowedDomains: ['api.example.com']
+        }
+      ];
+      
+      const evaluatorWithSpaces = new PolicyEvaluatorService(policiesWithSpaces);
+      
+      // Should find policy when queried with trimmed key
+      expect(evaluatorWithSpaces.hasPolicy('trimmed-key')).toBe(true);
+      expect(evaluatorWithSpaces.hasPolicy('  trimmed-key  ')).toBe(true);
+      
+      // Should allow valid request with trimmed key
+      const result = evaluatorWithSpaces.evaluate('trimmed-key', 'http_get', 'api.example.com');
+      expect(result.allowed).toBe(true);
+      
+      // Should also work with spaces in query
+      const resultWithSpaces = evaluatorWithSpaces.evaluate('  trimmed-key  ', 'http_get', 'api.example.com');
+      expect(resultWithSpaces.allowed).toBe(true);
+    });
   });
 });

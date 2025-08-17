@@ -1,10 +1,16 @@
 import { promises as fs } from 'fs';
+import path from 'path';
 import { PolicyConfig, PolicyLoader } from '../interfaces/policy.interface.js';
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
 
 export class PolicyLoaderService implements PolicyLoader {
-  constructor(private readonly policiesPath: string = CONFIG.DEFAULT_POLICIES_FILE) {}
+  constructor(
+    private readonly policiesPath: string = path.join(
+      CONFIG.DEFAULT_POLICIES_DIR,
+      CONFIG.DEFAULT_POLICIES_FILE
+    )
+  ) {}
 
   async loadPolicies(): Promise<PolicyConfig[]> {
     try {
@@ -18,7 +24,7 @@ export class PolicyLoaderService implements PolicyLoader {
       // Type assertion only after array check
       return (data as unknown[]).map(policy => this.freezePolicy(policy as any));
     } catch (error: any) {
-      if (error.code === 'ENOENT') {
+      if (error.code === CONFIG.FS_ERROR_ENOENT) {
         return [];
       }
       

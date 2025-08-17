@@ -115,7 +115,10 @@ export const CONFIG = {
   EXIT_CODE_SUCCESS: 0,
   EXIT_CODE_ERROR: 1,
   EXIT_CODE_INVALID_CONFIG: 2,
-  EXIT_CODE_MISSING_DEPENDENCY: 3
+  EXIT_CODE_MISSING_DEPENDENCY: 3,
+  
+  // File system error codes
+  FS_ERROR_ENOENT: 'ENOENT'
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG;
