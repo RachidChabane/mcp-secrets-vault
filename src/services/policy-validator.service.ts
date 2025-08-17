@@ -40,9 +40,9 @@ export class PolicyValidatorService implements PolicyValidator {
     }
     
     const requiredFields: (keyof PolicyConfig)[] = [
-      'secretId',
-      'allowedActions',
-      'allowedDomains'
+      TEXT.FIELD_SECRET_ID as keyof PolicyConfig,
+      TEXT.FIELD_ALLOWED_ACTIONS as keyof PolicyConfig,
+      TEXT.FIELD_ALLOWED_DOMAINS as keyof PolicyConfig
     ];
     
     for (const field of requiredFields) {
@@ -68,7 +68,7 @@ export class PolicyValidatorService implements PolicyValidator {
     }
   }
 
-  private validateAllowedActions(actions: string[]): void {
+  private validateAllowedActions(actions: readonly string[]): void {
     if (!Array.isArray(actions)) {
       throw new Error(TEXT.ERROR_INVALID_ALLOWED_ACTIONS);
     }
@@ -95,7 +95,7 @@ export class PolicyValidatorService implements PolicyValidator {
     }
   }
 
-  private validateAllowedDomains(domains: string[]): void {
+  private validateAllowedDomains(domains: readonly string[]): void {
     if (!Array.isArray(domains)) {
       throw new Error(TEXT.ERROR_INVALID_ALLOWED_DOMAINS);
     }
@@ -113,6 +113,11 @@ export class PolicyValidatorService implements PolicyValidator {
       
       if (trimmed.length > CONFIG.MAX_DOMAIN_LENGTH) {
         throw new Error(TEXT.ERROR_INVALID_DOMAIN);
+      }
+      
+      // Reject trailing dots and embedded whitespace in the trimmed value
+      if (trimmed.endsWith('.') || /\s/.test(trimmed)) {
+        throw new Error(`${TEXT.ERROR_INVALID_DOMAIN}: ${trimmed}`);
       }
       
       if (!CONFIG.DOMAIN_REGEX.test(trimmed)) {

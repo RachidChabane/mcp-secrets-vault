@@ -8,7 +8,7 @@ export class PolicyLoaderService implements PolicyLoader {
 
   async loadPolicies(): Promise<PolicyConfig[]> {
     try {
-      const content = await fs.readFile(this.policiesPath, 'utf-8');
+      const content = await fs.readFile(this.policiesPath, CONFIG.DEFAULT_ENCODING);
       const data: unknown = JSON.parse(content);
       
       if (!Array.isArray(data)) {
@@ -32,14 +32,18 @@ export class PolicyLoaderService implements PolicyLoader {
 
   private freezePolicy(policy: any): PolicyConfig {
     // Normalize actions to lowercase canonical form
-    const frozen: PolicyConfig = {
+    const frozen: any = {
       secretId: policy.secretId?.trim(),
-      allowedActions: Array.isArray(policy.allowedActions) 
-        ? policy.allowedActions.map((a: any) => a?.trim()?.toLowerCase())
-        : [],
-      allowedDomains: Array.isArray(policy.allowedDomains)
-        ? policy.allowedDomains.map((d: any) => d?.trim())
-        : [],
+      allowedActions: Object.freeze(
+        Array.isArray(policy.allowedActions) 
+          ? policy.allowedActions.map((a: any) => a?.trim()?.toLowerCase())
+          : []
+      ),
+      allowedDomains: Object.freeze(
+        Array.isArray(policy.allowedDomains)
+          ? policy.allowedDomains.map((d: any) => d?.trim())
+          : []
+      ),
     };
     
     if (policy.rateLimit) {
@@ -53,6 +57,6 @@ export class PolicyLoaderService implements PolicyLoader {
       frozen.expiresAt = policy.expiresAt?.trim();
     }
     
-    return Object.freeze(frozen);
+    return Object.freeze(frozen) as PolicyConfig;
   }
 }

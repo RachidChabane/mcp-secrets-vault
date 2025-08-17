@@ -1,14 +1,14 @@
 export interface RateLimit {
-  requests: number;
-  windowSeconds: number;
+  readonly requests: number;
+  readonly windowSeconds: number;
 }
 
 export interface PolicyConfig {
-  secretId: string;
-  allowedActions: string[];
-  allowedDomains: string[];
-  rateLimit?: RateLimit;
-  expiresAt?: string;
+  readonly secretId: string;
+  readonly allowedActions: readonly string[];
+  readonly allowedDomains: readonly string[];
+  readonly rateLimit?: Readonly<RateLimit>;
+  readonly expiresAt?: string;
 }
 
 export interface PolicyEvaluationResult {

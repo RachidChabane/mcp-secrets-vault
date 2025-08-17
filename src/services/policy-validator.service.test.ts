@@ -165,6 +165,40 @@ describe('PolicyValidatorService', () => {
       };
 
       expect(() => validator.validate(wildcard)).toThrow(TEXT.ERROR_INVALID_DOMAIN);
+
+      const trailingDot: PolicyConfig = {
+        secretId: 'test',
+        allowedActions: ['http_get'],
+        allowedDomains: ['api.example.com.']
+      };
+
+      expect(() => validator.validate(trailingDot)).toThrow(TEXT.ERROR_INVALID_DOMAIN);
+
+      const embeddedSpace: PolicyConfig = {
+        secretId: 'test',
+        allowedActions: ['http_get'],
+        allowedDomains: ['api .example.com']
+      };
+
+      expect(() => validator.validate(embeddedSpace)).toThrow(TEXT.ERROR_INVALID_DOMAIN);
+
+      const leadingSpace: PolicyConfig = {
+        secretId: 'test',
+        allowedActions: ['http_get'],
+        allowedDomains: [' api.example.com']
+      };
+
+      // Leading/trailing spaces are trimmed, so this should pass after trimming
+      expect(() => validator.validate(leadingSpace)).not.toThrow();
+
+      const trailingSpace: PolicyConfig = {
+        secretId: 'test',
+        allowedActions: ['http_get'],
+        allowedDomains: ['api.example.com ']
+      };
+
+      // Leading/trailing spaces are trimmed, so this should pass after trimming
+      expect(() => validator.validate(trailingSpace)).not.toThrow();
     });
 
     it('should reject invalid rate limit', () => {

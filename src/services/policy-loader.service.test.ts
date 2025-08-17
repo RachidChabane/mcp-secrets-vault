@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'fs';
 import { PolicyLoaderService } from './policy-loader.service.js';
 import { PolicyConfig } from '../interfaces/policy.interface.js';
+import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
 
 vi.mock('fs', () => ({
@@ -129,7 +130,7 @@ describe('PolicyLoaderService', () => {
 
       await customLoader.loadPolicies();
 
-      expect(mockReadFile).toHaveBeenCalledWith('custom/path.json', 'utf-8');
+      expect(mockReadFile).toHaveBeenCalledWith('custom/path.json', CONFIG.DEFAULT_ENCODING);
     });
 
     it('should normalize actions to lowercase', async () => {
@@ -162,6 +163,42 @@ describe('PolicyLoaderService', () => {
 
       expect(result[0]?.allowedActions).toEqual([]);
       expect(result[0]?.allowedDomains).toEqual([]);
+    });
+
+    it('should deeply freeze arrays to prevent mutation', async () => {
+      const policies: PolicyConfig[] = [
+        {
+          secretId: 'test',
+          allowedActions: ['http_get'],
+          allowedDomains: ['api.example.com']
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+      const policy = result[0];
+
+      // Test that arrays are frozen
+      expect(Object.isFrozen(policy?.allowedActions)).toBe(true);
+      expect(Object.isFrozen(policy?.allowedDomains)).toBe(true);
+
+      // Test that push/splice/index assignment fail
+      expect(() => {
+        (policy?.allowedActions as any).push('http_post');
+      }).toThrow();
+
+      expect(() => {
+        (policy?.allowedActions as any).splice(0, 1);
+      }).toThrow();
+
+      expect(() => {
+        (policy?.allowedActions as any)[0] = 'http_post';
+      }).toThrow();
+
+      expect(() => {
+        (policy?.allowedDomains as any).push('evil.com');
+      }).toThrow();
     });
   });
 });
