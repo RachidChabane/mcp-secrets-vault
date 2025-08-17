@@ -51,6 +51,9 @@ coverage/
 !**/test/**/*secret*
 !**/test/**/*token*
 !**/test/**/*key*
+!src/**/*secret*
+!src/**/*token*
+!src/**/*key*
 
 # Audit logs
 audit/

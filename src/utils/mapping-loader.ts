@@ -1,0 +1,51 @@
+import { readFile } from 'fs/promises';
+import { z } from 'zod';
+import { SecretMapping } from '../interfaces/secret-mapping.interface.js';
+import { CONFIG } from '../constants/config-constants.js';
+import { TEXT } from '../constants/text-constants.js';
+
+const SecretMappingSchema = z.object({
+  secretId: z.string().min(1).max(CONFIG.MAX_SECRET_ID_LENGTH),
+  envVar: z.string().min(1),
+  description: z.string().optional()
+});
+
+const MappingsFileSchema = z.object({
+  mappings: z.array(SecretMappingSchema)
+});
+
+export class MappingLoader {
+  async loadFromFile(filePath: string): Promise<SecretMapping[]> {
+    try {
+      const content = await readFile(filePath, CONFIG.DEFAULT_ENCODING);
+      const data = JSON.parse(content);
+      
+      const validated = MappingsFileSchema.parse(data);
+      return validated.mappings;
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new Error(TEXT.ERROR_INVALID_CONFIG);
+      }
+      throw new Error(TEXT.ERROR_INVALID_CONFIG);
+    }
+  }
+
+  loadFromEnvironment(): SecretMapping[] {
+    const envPrefix = CONFIG.ENV_PREFIX;
+    const mappings: SecretMapping[] = [];
+    
+    for (const [key, value] of Object.entries(process.env)) {
+      if (key.startsWith(envPrefix) && key.endsWith('_MAPPING')) {
+        try {
+          const mapping = JSON.parse(value || '{}');
+          const validated = SecretMappingSchema.parse(mapping);
+          mappings.push(validated);
+        } catch {
+          continue;
+        }
+      }
+    }
+    
+    return mappings;
+  }
+}
