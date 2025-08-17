@@ -44,10 +44,13 @@ export const CONFIG = {
   ENV_VAR_REGEX: /^[A-Z][A-Z0-9_]*$/,
   MIN_SECRET_ID_LENGTH: 1,
   MIN_ENV_VAR_LENGTH: 1,
+  DOMAIN_REGEX: /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i,
+  ACTION_REGEX: /^[a-z_]+$/,
   
   // File paths
   DEFAULT_CONFIG_FILE: 'vault.config.json',
   DEFAULT_POLICIES_DIR: 'policies',
+  DEFAULT_POLICIES_FILE: 'policies.json',
   DEFAULT_MAPPINGS_FILE: 'mappings.json',
   DEFAULT_AUDIT_DIR: 'audit',
   
@@ -61,12 +64,17 @@ export const CONFIG = {
   // Error codes
   ERROR_CODE_UNKNOWN_SECRET: 'unknown_secret',
   ERROR_CODE_FORBIDDEN_DOMAIN: 'forbidden_domain',
+  ERROR_CODE_FORBIDDEN_ACTION: 'forbidden_action',
   ERROR_CODE_TTL_EXPIRED: 'ttl_expired',
   ERROR_CODE_RATE_LIMITED: 'rate_limited',
   ERROR_CODE_PAYLOAD_TOO_LARGE: 'payload_too_large',
   ERROR_CODE_MISSING_ENV: 'missing_env',
   ERROR_CODE_TIMEOUT: 'timeout',
   ERROR_CODE_INVALID_REQUEST: 'invalid_request',
+  ERROR_CODE_INVALID_POLICY: 'invalid_policy',
+  ERROR_CODE_POLICY_EXPIRED: 'policy_expired',
+  ERROR_CODE_NO_POLICY: 'no_policy',
+  ERROR_CODE_POLICIES_NOT_LOADED: 'policies_not_loaded',
   
   // Pagination
   DEFAULT_PAGE_NUMBER: 1,
@@ -93,6 +101,9 @@ export const CONFIG = {
   // Supported HTTP methods
   SUPPORTED_HTTP_METHODS: ['GET', 'POST'] as const,
   
+  // Supported actions for policies
+  SUPPORTED_ACTIONS: ['http_get', 'http_post'] as const,
+  
   // Default values
   DEFAULT_TIMEZONE: 'UTC',
   DEFAULT_ENCODING: 'utf-8',
@@ -104,7 +115,10 @@ export const CONFIG = {
   EXIT_CODE_SUCCESS: 0,
   EXIT_CODE_ERROR: 1,
   EXIT_CODE_INVALID_CONFIG: 2,
-  EXIT_CODE_MISSING_DEPENDENCY: 3
+  EXIT_CODE_MISSING_DEPENDENCY: 3,
+  
+  // File system error codes
+  FS_ERROR_ENOENT: 'ENOENT'
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG;

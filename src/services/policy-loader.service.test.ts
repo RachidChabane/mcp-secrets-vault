@@ -1,0 +1,222 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { PolicyLoaderService } from './policy-loader.service.js';
+import { PolicyConfig } from '../interfaces/policy.interface.js';
+import { CONFIG } from '../constants/config-constants.js';
+import { TEXT } from '../constants/text-constants.js';
+
+vi.mock('fs', () => ({
+  promises: {
+    readFile: vi.fn()
+  }
+}));
+
+describe('PolicyLoaderService', () => {
+  let loader: PolicyLoaderService;
+  const mockReadFile = fs.readFile as any;
+
+  beforeEach(() => {
+    loader = new PolicyLoaderService();
+    vi.clearAllMocks();
+  });
+
+  describe('loadPolicies', () => {
+    it('should use default joined path when not provided', async () => {
+      const expectedPath = path.join(CONFIG.DEFAULT_POLICIES_DIR, CONFIG.DEFAULT_POLICIES_FILE);
+      mockReadFile.mockResolvedValue('[]');
+
+      await loader.loadPolicies();
+
+      expect(mockReadFile).toHaveBeenCalledWith(expectedPath, CONFIG.DEFAULT_ENCODING);
+    });
+
+    it('should load and parse valid policies', async () => {
+      const policies: PolicyConfig[] = [
+        {
+          secretId: 'test-secret',
+          allowedActions: ['http_get'],
+          allowedDomains: ['api.example.com']
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.secretId).toBe('test-secret');
+      expect(result[0]?.allowedActions).toEqual(['http_get']);
+      expect(result[0]?.allowedDomains).toEqual(['api.example.com']);
+    });
+
+    it('should return empty array when file does not exist', async () => {
+      const error = new Error('File not found') as any;
+      error.code = CONFIG.FS_ERROR_ENOENT;
+      mockReadFile.mockRejectedValue(error);
+
+      const result = await loader.loadPolicies();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should throw error for invalid JSON', async () => {
+      mockReadFile.mockResolvedValue('invalid json');
+
+      await expect(loader.loadPolicies()).rejects.toThrow(TEXT.ERROR_INVALID_CONFIG);
+    });
+
+    it('should throw error when data is not an array', async () => {
+      mockReadFile.mockResolvedValue('{"not": "array"}');
+
+      await expect(loader.loadPolicies()).rejects.toThrow(TEXT.ERROR_INVALID_CONFIG);
+    });
+
+    it('should trim whitespace from policy fields', async () => {
+      const policies: PolicyConfig[] = [
+        {
+          secretId: '  test-secret  ',
+          allowedActions: ['  http_get  ', 'http_post  '],
+          allowedDomains: ['  api.example.com  '],
+          expiresAt: '  2024-12-31T23:59:59Z  '
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      expect(result[0]?.secretId).toBe('test-secret');
+      expect(result[0]?.allowedActions).toEqual(['http_get', 'http_post']); // normalized to lowercase
+      expect(result[0]?.allowedDomains).toEqual(['api.example.com']);
+      expect(result[0]?.expiresAt).toBe('2024-12-31T23:59:59Z');
+    });
+
+    it('should freeze policy objects', async () => {
+      const policies: PolicyConfig[] = [
+        {
+          secretId: 'test',
+          allowedActions: ['http_get'],
+          allowedDomains: ['api.example.com'],
+          rateLimit: { requests: 100, windowSeconds: 3600 }
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      expect(Object.isFrozen(result[0])).toBe(true);
+      expect(Object.isFrozen(result[0]?.rateLimit)).toBe(true);
+    });
+
+    it('should handle policies with rate limits', async () => {
+      const policies: PolicyConfig[] = [
+        {
+          secretId: 'test',
+          allowedActions: ['http_get'],
+          allowedDomains: ['api.example.com'],
+          rateLimit: { requests: 50, windowSeconds: 1800 }
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      expect(result[0]?.rateLimit).toEqual({ requests: 50, windowSeconds: 1800 });
+    });
+
+    it('should propagate other errors', async () => {
+      const error = new Error('Permission denied');
+      mockReadFile.mockRejectedValue(error);
+
+      await expect(loader.loadPolicies()).rejects.toThrow('Permission denied');
+    });
+
+    it('should use custom path when provided', async () => {
+      const customLoader = new PolicyLoaderService('custom/path.json');
+      mockReadFile.mockResolvedValue('[]');
+
+      await customLoader.loadPolicies();
+
+      expect(mockReadFile).toHaveBeenCalledWith('custom/path.json', CONFIG.DEFAULT_ENCODING);
+    });
+
+    it('should normalize, deduplicate, and sort actions and domains', async () => {
+      const policies = [
+        {
+          secretId: 'test',
+          allowedActions: ['HTTP_GET', 'Http_Post', 'HTTP_post', ' http_get ', 'http_GET'],
+          allowedDomains: ['API.example.com', ' api.EXAMPLE.com ', 'test.example.com', 'api.example.com']
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      // Actions should be deduplicated, lowercased, and sorted
+      expect(result[0]?.allowedActions).toEqual(['http_get', 'http_post']);
+      
+      // Domains should be deduplicated, lowercased, and sorted
+      expect(result[0]?.allowedDomains).toEqual(['api.example.com', 'test.example.com']);
+    });
+
+    it('should handle missing arrays gracefully', async () => {
+      const policies = [
+        {
+          secretId: 'test',
+          // Missing allowedActions and allowedDomains
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+
+      expect(result[0]?.allowedActions).toEqual([]);
+      expect(result[0]?.allowedDomains).toEqual([]);
+    });
+
+    it('should deeply freeze normalized arrays to prevent mutation', async () => {
+      const policies: PolicyConfig[] = [
+        {
+          secretId: 'test',
+          allowedActions: ['HTTP_GET', 'http_get', ' Http_Post '],
+          allowedDomains: ['API.example.com', 'test.example.com']
+        }
+      ];
+
+      mockReadFile.mockResolvedValue(JSON.stringify(policies));
+
+      const result = await loader.loadPolicies();
+      const policy = result[0];
+
+      // Test that deduplicated/sorted arrays are frozen
+      expect(Object.isFrozen(policy?.allowedActions)).toBe(true);
+      expect(Object.isFrozen(policy?.allowedDomains)).toBe(true);
+      
+      // Verify they're normalized
+      expect(policy?.allowedActions).toEqual(['http_get', 'http_post']);
+      expect(policy?.allowedDomains).toEqual(['api.example.com', 'test.example.com']);
+
+      // Test that push/splice/index assignment fail
+      expect(() => {
+        (policy?.allowedActions as any).push('http_post');
+      }).toThrow();
+
+      expect(() => {
+        (policy?.allowedActions as any).splice(0, 1);
+      }).toThrow();
+
+      expect(() => {
+        (policy?.allowedActions as any)[0] = 'http_post';
+      }).toThrow();
+
+      expect(() => {
+        (policy?.allowedDomains as any).push('evil.com');
+      }).toThrow();
+    });
+  });
+});
