@@ -6,7 +6,7 @@ import { z } from 'zod';
 const DiscoverSchema = z.object({});
 
 export interface DiscoverResponse {
-  readonly secrets: readonly SecretInfo[];
+  readonly [key: string]: readonly SecretInfo[];
 }
 
 export class DiscoverTool {
@@ -38,15 +38,20 @@ export class DiscoverTool {
       const info = this.secretProvider.getSecretInfo(secretId);
       if (info) {
         secrets.push(Object.freeze({
-          secretId: info.secretId,
-          available: info.available,
-          description: info.description
-        }));
+          [TEXT.FIELD_SECRET_ID]: info.secretId,
+          [TEXT.FIELD_AVAILABLE]: info.available,
+          [TEXT.FIELD_DESCRIPTION]: info.description
+        } as SecretInfo));
       }
     }
     
+    // Sort secrets case-insensitively by secretId for determinism
+    secrets.sort((a, b) => 
+      a.secretId.toLowerCase().localeCompare(b.secretId.toLowerCase())
+    );
+    
     return Object.freeze({
-      secrets: Object.freeze(secrets)
+      [TEXT.FIELD_SECRETS]: Object.freeze(secrets)
     });
   }
 }

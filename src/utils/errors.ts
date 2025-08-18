@@ -51,3 +51,11 @@ export class SecretNotFoundError extends VaultError {
     Object.setPrototypeOf(this, SecretNotFoundError.prototype);
   }
 }
+
+export class ToolError extends VaultError {
+  constructor(message: string, code: string) {
+    super(code, message);
+    this.name = 'ToolError';
+    Object.setPrototypeOf(this, ToolError.prototype);
+  }
+}

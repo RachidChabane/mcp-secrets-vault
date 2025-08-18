@@ -34,6 +34,8 @@ export const TEXT = {
   ERROR_POLICIES_NOT_LOADED: 'Policies not loaded',
   ERROR_NETWORK_ERROR: 'Network request failed',
   ERROR_EMPTY_HEADER_NAME: 'Header name cannot be empty',
+  ERROR_UNKNOWN_TOOL: 'Unknown tool requested',
+  ERROR_TOOL_EXECUTION_FAILED: 'Tool execution failed',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',
@@ -61,6 +63,12 @@ export const TEXT = {
   FIELD_HAS_MORE: 'hasMore',
   FIELD_START_TIME: 'startTime',
   FIELD_END_TIME: 'endTime',
+  FIELD_SECRETS: 'secrets',
+  FIELD_AVAILABLE: 'available',
+  FIELD_DESCRIPTION: 'description',
+  FIELD_ERROR: 'error',
+  FIELD_CODE: 'code',
+  FIELD_MESSAGE: 'message',
   
   // Log messages
   LOG_SERVER_STARTED: 'MCP server started',
@@ -74,7 +82,7 @@ export const TEXT = {
   // Audit outcomes
   AUDIT_OUTCOME_SUCCESS: 'success',
   AUDIT_OUTCOME_DENIED: 'denied',
-  AUDIT_OUTCOME_ERROR: 'error',
+  AUDIT_OUTCOME_ERROR: 'failure',
   
   // HTTP methods
   HTTP_METHOD_GET: 'http_get',
@@ -97,11 +105,11 @@ export const TEXT = {
   TOOL_AUDIT: 'query_audit',
   
   // Tool descriptions
-  TOOL_DESC_DISCOVER: 'List available secret identifiers',
+  TOOL_DESC_DISCOVER: 'List available secrets',
   TOOL_DESC_DESCRIBE: 'Get policy details for a secret',
   TOOL_DESC_USE: 'Use a secret to perform an action',
   TOOL_DESC_AUDIT: 'Query audit log entries',
-  TOOL_DISCOVER_DESCRIPTION: 'List all available secret identifiers with their metadata'
+  TOOL_DISCOVER_DESCRIPTION: 'List all available secret identifiers and their metadata'
 } as const;
 
 export type TextKey = keyof typeof TEXT;

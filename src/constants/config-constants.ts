@@ -75,6 +75,7 @@ export const CONFIG = {
   ERROR_CODE_POLICY_EXPIRED: 'policy_expired',
   ERROR_CODE_NO_POLICY: 'no_policy',
   ERROR_CODE_POLICIES_NOT_LOADED: 'policies_not_loaded',
+  ERROR_CODE_UNKNOWN_TOOL: 'unknown_tool',
   
   // Pagination
   DEFAULT_PAGE_NUMBER: 1,

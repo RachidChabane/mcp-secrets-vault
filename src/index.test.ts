@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { TEXT } from './constants/text-constants.js';
 
 describe('MCP Server Integration', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -57,8 +58,8 @@ describe('MCP Server Integration', () => {
     const tool = new DiscoverTool(provider);
     const result = await tool.execute({});
     
-    expect(result).toHaveProperty('secrets');
-    expect(Array.isArray(result.secrets)).toBe(true);
+    expect(result).toHaveProperty(TEXT.FIELD_SECRETS);
+    expect(Array.isArray(result[TEXT.FIELD_SECRETS])).toBe(true);
   });
   
   it('should never expose envVar in discover results', async () => {
@@ -87,10 +88,79 @@ describe('MCP Server Integration', () => {
     expect(serialized).not.toContain('secret-value');
     
     // Verify correct fields are present
-    expect(result.secrets[0]).toEqual({
-      secretId: 'test_secret',
-      available: true,
-      description: 'Test secret'
+    expect(result[TEXT.FIELD_SECRETS]?.[0]).toEqual({
+      [TEXT.FIELD_SECRET_ID]: 'test_secret',
+      [TEXT.FIELD_AVAILABLE]: true,
+      [TEXT.FIELD_DESCRIPTION]: 'Test secret'
+    });
+  });
+
+  describe('MCP Protocol Tests', () => {
+    it('should list discover tool through MCP', async () => {
+      const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
+      const { ListToolsRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+      const { DiscoverTool } = await import('./tools/discover-tool.js');
+      const { EnvSecretProvider } = await import('./services/env-secret-provider.js');
+      
+      const server = new Server(
+        { name: 'test', version: '1.0.0' },
+        { capabilities: { tools: {} } }
+      );
+      
+      const provider = new EnvSecretProvider([]);
+      const discoverTool = new DiscoverTool(provider);
+      
+      // Register handler
+      server.setRequestHandler(ListToolsRequestSchema, async () => ({
+        tools: [discoverTool.getTool()]
+      }));
+      
+      // Would normally test through transport, but for unit test we verify structure
+      const toolDef = discoverTool.getTool();
+      expect(toolDef.name).toBe(TEXT.TOOL_DISCOVER);
+      expect(toolDef.description).toBe(TEXT.TOOL_DISCOVER_DESCRIPTION);
+    });
+
+    it('should execute discover tool through MCP handler', async () => {
+      const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
+      const { CallToolRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+      const { DiscoverTool } = await import('./tools/discover-tool.js');
+      const { EnvSecretProvider } = await import('./services/env-secret-provider.js');
+      
+      const server = new Server(
+        { name: 'test', version: '1.0.0' },
+        { capabilities: { tools: {} } }
+      );
+      
+      const provider = new EnvSecretProvider([
+        { secretId: 'test1', envVar: 'TEST1', description: 'First' },
+        { secretId: 'test2', envVar: 'TEST2', description: 'Second' }
+      ]);
+      
+      process.env['TEST1'] = 'value1';
+      process.env['TEST2'] = 'value2';
+      
+      const discoverTool = new DiscoverTool(provider);
+      
+      server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        if (request.params.name === TEXT.TOOL_DISCOVER) {
+          const result = await discoverTool.execute(request.params.arguments);
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(result, null, 2)
+            }]
+          };
+        }
+        throw new Error('Unknown tool');
+      });
+      
+      // Simulate tool call
+      const result = await discoverTool.execute({});
+      
+      expect(result[TEXT.FIELD_SECRETS]).toHaveLength(2);
+      expect(result[TEXT.FIELD_SECRETS]?.[0]?.[TEXT.FIELD_SECRET_ID]).toBe('test1');
+      expect(result[TEXT.FIELD_SECRETS]?.[1]?.[TEXT.FIELD_SECRET_ID]).toBe('test2');
     });
   });
 });

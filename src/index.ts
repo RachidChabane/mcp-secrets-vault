@@ -9,6 +9,7 @@ import { EnvSecretProvider } from './services/env-secret-provider.js';
 import { DiscoverTool } from './tools/discover-tool.js';
 import { SecretMapping } from './interfaces/secret-mapping.interface.js';
 import { writeError } from './utils/logging.js';
+import { ToolError } from './utils/errors.js';
 
 async function loadMappings(): Promise<SecretMapping[]> {
   // TODO: Load from configuration file
@@ -20,7 +21,10 @@ async function loadMappings(): Promise<SecretMapping[]> {
     try {
       return JSON.parse(process.env['TEST_SECRET_MAPPINGS']);
     } catch (error) {
-      writeError('Failed to parse TEST_SECRET_MAPPINGS', { error: String(error) });
+      writeError(TEXT.ERROR_INVALID_CONFIG, { 
+        level: 'ERROR',
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST 
+      });
     }
   }
   
@@ -73,17 +77,36 @@ async function main(): Promise<void> {
         }
         
         default:
-          throw new Error(`Unknown tool: ${name}`);
+          throw new ToolError(
+            TEXT.ERROR_UNKNOWN_TOOL,
+            CONFIG.ERROR_CODE_UNKNOWN_TOOL
+          );
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      writeError(`Tool execution failed: ${name}`, { error: errorMessage });
+      let errorCode: string = CONFIG.ERROR_CODE_INVALID_REQUEST;
+      let errorMessage: string = TEXT.ERROR_TOOL_EXECUTION_FAILED;
+      
+      if (error instanceof ToolError) {
+        errorCode = error.code;
+        errorMessage = error.message;
+      }
+      
+      writeError(errorMessage, { 
+        level: 'ERROR',
+        code: errorCode,
+        tool: name
+      });
       
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({ error: errorMessage }, null, 2),
+            text: JSON.stringify({
+              [TEXT.FIELD_ERROR]: {
+                [TEXT.FIELD_CODE]: errorCode,
+                [TEXT.FIELD_MESSAGE]: errorMessage
+              }
+            }, null, 2),
           },
         ],
         isError: true,
@@ -98,8 +121,9 @@ async function main(): Promise<void> {
   await server.connect(transport);
   
   // Log startup
-  writeError(`${TEXT.LOG_SERVER_STARTED} - ${CONFIG.SERVER_NAME} v${CONFIG.VERSION}`, {
-    level: 'INFO'
+  writeError(TEXT.LOG_SERVER_STARTED, {
+    level: 'INFO',
+    version: CONFIG.VERSION
   });
   
   // Handle shutdown signals
@@ -114,8 +138,11 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => {
-    writeError('Fatal error', { error: String(error) });
+  main().catch(() => {
+    writeError(TEXT.ERROR_INVALID_CONFIG, { 
+      level: 'ERROR',
+      code: CONFIG.ERROR_CODE_INVALID_REQUEST
+    });
     process.exit(CONFIG.EXIT_CODE_ERROR);
   });
 }
