@@ -102,6 +102,10 @@ export const TEXT = {
   INJECTION_TYPE_BEARER: 'bearer',
   INJECTION_TYPE_HEADER: 'header',
   
+  // Header names
+  AUTHORIZATION_HEADER: 'Authorization',
+  SECRET_HEADER_NAME: 'X-Secret',
+  
   // Response messages
   RESPONSE_NO_SECRETS: 'No secrets configured',
   RESPONSE_POLICY_DESCRIPTION: 'Policy for secret',

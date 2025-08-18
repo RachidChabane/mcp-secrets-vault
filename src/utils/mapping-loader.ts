@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { SecretMapping } from '../interfaces/secret-mapping.interface.js';
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
-import { ConfigurationError } from './errors.js';
+import { ToolError } from './errors.js';
+import { mapZodErrorToToolError } from './zod-mapper.js';
 
 const SecretMappingSchema = z.object({
   secretId: z.string().trim().min(CONFIG.MIN_SECRET_ID_LENGTH).max(CONFIG.MAX_SECRET_ID_LENGTH),
@@ -24,14 +25,18 @@ export class MappingLoader {
       const validated = MappingsFileSchema.parse(data);
       return validated.mappings;
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        const field = error.errors[0]?.path.join('.');
-        throw new ConfigurationError(TEXT.ERROR_INVALID_CONFIG, field);
+      // Check if it's a ZodError by looking for the issues property
+      const err = error as any;
+      if (err?.issues && Array.isArray(err.issues)) {
+        // Map ZodError to ToolError
+        throw mapZodErrorToToolError(err as z.ZodError);
       }
-      if (error instanceof SyntaxError) {
-        throw new ConfigurationError(TEXT.ERROR_INVALID_CONFIG);
+      // Check if it's a SyntaxError by checking the name property
+      if (err?.name === 'SyntaxError') {
+        throw new ToolError(TEXT.ERROR_INVALID_CONFIG, CONFIG.ERROR_CODE_INVALID_REQUEST);
       }
-      throw new ConfigurationError(TEXT.ERROR_INVALID_CONFIG);
+      // Default to configuration error
+      throw new ToolError(TEXT.ERROR_INVALID_CONFIG, CONFIG.ERROR_CODE_INVALID_REQUEST);
     }
   }
 
