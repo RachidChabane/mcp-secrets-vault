@@ -547,6 +547,25 @@ describe('JsonlAuditService', () => {
 
       expect(result.entries).toHaveLength(0);
     });
+
+    it('should rethrow non-ENOENT errors from getAuditFiles', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValueOnce([]); // For initialize
+      mockFs.readdir.mockRejectedValueOnce(new Error('Permission denied')); // For query
+
+      await service.initialize();
+      await expect(service.query()).rejects.toThrow('Permission denied');
+    });
+
+    it('should handle stat errors when creating file info', async () => {
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValueOnce([]); // For initialize
+      mockFs.readdir.mockResolvedValueOnce([`${CONFIG.AUDIT_FILE_PREFIX}-test${CONFIG.AUDIT_FILE_EXTENSION}`]); // For query
+      mockFs.stat.mockRejectedValue(new Error('Stat failed'));
+
+      await service.initialize();
+      await expect(service.query()).rejects.toThrow('Stat failed');
+    });
   });
 
   describe('security invariants', () => {

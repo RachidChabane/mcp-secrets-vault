@@ -79,38 +79,19 @@ export class JsonlAuditService implements AuditService {
       await this.initialize();
     }
 
-    const files = await this.getAuditFiles();
-    const allEntries: AuditEntry[] = [];
-
-    for (const file of files) {
-      const entries = await this.readEntries(file.path, options);
-      allEntries.push(...entries);
-    }
-
+    const allEntries = await this.collectAllEntries(options);
     const filteredEntries = this.filterEntries(allEntries, options);
     const sortedEntries = this.sortEntries(filteredEntries);
     
-    // Coerce page to valid minimum
-    const rawPage = options?.page ?? CONFIG.DEFAULT_PAGE_NUMBER;
-    const page = Math.max(rawPage, CONFIG.DEFAULT_PAGE_NUMBER);
-    
-    // Coerce pageSize to valid range
-    const rawPageSize = options?.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE;
-    const pageSize = Math.min(
-      Math.max(rawPageSize, CONFIG.DEFAULT_PAGE_NUMBER),
-      CONFIG.AUDIT_MAX_PAGE_SIZE
-    );
-    
-    const startIndex = (page - 1) * pageSize;
-    const endIndex = startIndex + pageSize;
-    const paginatedEntries = sortedEntries.slice(startIndex, endIndex);
+    const pagination = this.normalizePagination(options);
+    const paginatedEntries = this.paginate(sortedEntries, pagination);
 
     return {
       entries: paginatedEntries,
       totalCount: sortedEntries.length,
-      page,
-      pageSize,
-      hasMore: endIndex < sortedEntries.length
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      hasMore: pagination.endIndex < sortedEntries.length
     };
   }
 
@@ -179,10 +160,42 @@ export class JsonlAuditService implements AuditService {
     }
   }
 
+  private async collectAllEntries(options?: AuditQueryOptions): Promise<AuditEntry[]> {
+    const files = await this.getAuditFiles();
+    const allEntries: AuditEntry[] = [];
+
+    for (const file of files) {
+      const entries = await this.readEntries(file.path, options);
+      allEntries.push(...entries);
+    }
+
+    return allEntries;
+  }
+
+  private normalizePagination(options?: AuditQueryOptions) {
+    const rawPage = options?.page ?? CONFIG.DEFAULT_PAGE_NUMBER;
+    const page = Math.max(rawPage, CONFIG.DEFAULT_PAGE_NUMBER);
+    
+    const rawPageSize = options?.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE;
+    const pageSize = Math.min(
+      Math.max(rawPageSize, CONFIG.DEFAULT_PAGE_NUMBER),
+      CONFIG.AUDIT_MAX_PAGE_SIZE
+    );
+    
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    return { page, pageSize, startIndex, endIndex };
+  }
+
+  private paginate(entries: AuditEntry[], pagination: ReturnType<typeof this.normalizePagination>): AuditEntry[] {
+    return entries.slice(pagination.startIndex, pagination.endIndex);
+  }
+
   private shouldRotateFile(file: AuditFileInfo): boolean {
-    const sizeMB = file.size / (1024 * 1024);
+    const sizeMB = file.size / CONFIG.BYTES_PER_MB;
     const ageMs = Date.now() - file.createdAt.getTime();
-    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    const ageDays = ageMs / CONFIG.MS_PER_DAY;
     
     return sizeMB >= this.rotationStrategy.maxSizeMB || 
            ageDays >= this.rotationStrategy.maxAgeDays;
@@ -191,22 +204,10 @@ export class JsonlAuditService implements AuditService {
   private async getAuditFiles(): Promise<AuditFileInfo[]> {
     try {
       const entries = await fs.readdir(this.auditDir);
-      const files: AuditFileInfo[] = [];
-      
-      for (const entry of entries) {
-        if (!entry.startsWith(CONFIG.AUDIT_FILE_PREFIX)) continue;
-        if (!entry.endsWith(CONFIG.AUDIT_FILE_EXTENSION)) continue;
-        
-        const filePath = path.join(this.auditDir, entry);
-        const stats = await fs.stat(filePath);
-        
-        files.push({
-          path: filePath,
-          size: stats.size,
-          createdAt: stats.birthtime,
-          lineCount: 0
-        });
-      }
+      const validEntries = entries.filter(entry => this.isAuditFile(entry));
+      const files = await Promise.all(
+        validEntries.map(entry => this.createFileInfo(entry))
+      );
       
       return files.sort((a, b) => 
         b.createdAt.getTime() - a.createdAt.getTime()
@@ -219,6 +220,23 @@ export class JsonlAuditService implements AuditService {
     }
   }
 
+  private isAuditFile(entry: string): boolean {
+    return entry.startsWith(CONFIG.AUDIT_FILE_PREFIX) &&
+           entry.endsWith(CONFIG.AUDIT_FILE_EXTENSION);
+  }
+
+  private async createFileInfo(entry: string): Promise<AuditFileInfo> {
+    const filePath = path.join(this.auditDir, entry);
+    const stats = await fs.stat(filePath);
+    
+    return {
+      path: filePath,
+      size: stats.size,
+      createdAt: stats.birthtime,
+      lineCount: CONFIG.ZERO_COUNT
+    };
+  }
+
   private async readEntries(
     filePath: string, 
     options?: AuditQueryOptions
@@ -226,7 +244,7 @@ export class JsonlAuditService implements AuditService {
     try {
       const content = await fs.readFile(filePath, CONFIG.DEFAULT_ENCODING);
       // Handle both LF and CRLF line endings
-      const lines = content.split(/\r?\n/).filter(line => line.trim());
+      const lines = content.split(CONFIG.LINE_ENDING_PATTERN).filter(line => line.trim());
       const entries: AuditEntry[] = [];
       
       for (const line of lines) {
