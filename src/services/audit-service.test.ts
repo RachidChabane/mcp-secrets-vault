@@ -250,6 +250,35 @@ describe('JsonlAuditService', () => {
       expect(result.hasMore).toBe(true);
     });
 
+    it('should coerce negative page to minimum', async () => {
+      const result = await service.query({ page: -1, pageSize: 2 });
+
+      expect(result.page).toBe(CONFIG.DEFAULT_PAGE_NUMBER);
+      expect(result.entries).toHaveLength(2);
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('should coerce zero page to minimum', async () => {
+      const result = await service.query({ page: 0, pageSize: 2 });
+
+      expect(result.page).toBe(CONFIG.DEFAULT_PAGE_NUMBER);
+      expect(result.entries).toHaveLength(2);
+    });
+
+    it('should coerce zero pageSize to minimum', async () => {
+      const result = await service.query({ page: 1, pageSize: 0 });
+
+      expect(result.pageSize).toBe(CONFIG.DEFAULT_PAGE_NUMBER);
+      expect(result.entries).toHaveLength(CONFIG.DEFAULT_PAGE_NUMBER);
+    });
+
+    it('should coerce negative pageSize to minimum', async () => {
+      const result = await service.query({ page: 1, pageSize: -10 });
+
+      expect(result.pageSize).toBe(CONFIG.DEFAULT_PAGE_NUMBER);
+      expect(result.entries).toHaveLength(CONFIG.DEFAULT_PAGE_NUMBER);
+    });
+
     it('should sort entries by timestamp descending', async () => {
       const result = await service.query();
 
@@ -274,6 +303,17 @@ describe('JsonlAuditService', () => {
       const result = await service.query();
 
       expect(result.entries).toHaveLength(1);
+    });
+
+    it('should handle CRLF line endings correctly', async () => {
+      const crlfContent = mockEntries.map(e => JSON.stringify(e)).join('\r\n');
+      mockFs.readFile.mockResolvedValue(crlfContent);
+
+      const result = await service.query();
+
+      expect(result.entries).toHaveLength(3);
+      expect(result.totalCount).toBe(3);
+      expect(result.entries[0]?.secretId).toBe('secret1');
     });
 
     it('should limit page size to maximum', async () => {
@@ -351,6 +391,53 @@ describe('JsonlAuditService', () => {
       await service.cleanup(maxAgeMs);
 
       expect(mockFs.unlink).not.toHaveBeenCalled();
+    });
+
+    it('should never delete the active audit file even if old', async () => {
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 10);
+      
+      const activeFileName = `${CONFIG.AUDIT_FILE_PREFIX}-active${CONFIG.AUDIT_FILE_EXTENSION}`;
+      const oldFileName = `${CONFIG.AUDIT_FILE_PREFIX}-old${CONFIG.AUDIT_FILE_EXTENSION}`;
+      
+      // Initialize with the active file
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValueOnce([activeFileName]);
+      mockFs.stat.mockResolvedValueOnce({
+        size: 1024,
+        birthtime: oldDate,
+        isFile: () => true
+      });
+      
+      await service.initialize();
+      
+      // Cleanup should find both files
+      mockFs.readdir.mockResolvedValueOnce([activeFileName, oldFileName]);
+      mockFs.stat
+        .mockResolvedValueOnce({
+          size: 1024,
+          birthtime: oldDate,
+          isFile: () => true
+        })
+        .mockResolvedValueOnce({
+          size: 1024,
+          birthtime: oldDate,
+          isFile: () => true
+        });
+      
+      mockFs.unlink.mockResolvedValue(undefined);
+      
+      const maxAgeMs = 5 * 24 * 60 * 60 * 1000; // 5 days
+      await service.cleanup(maxAgeMs);
+      
+      // Should only delete the old file, not the active one
+      expect(mockFs.unlink).toHaveBeenCalledTimes(1);
+      expect(mockFs.unlink).toHaveBeenCalledWith(
+        path.join(testDir, oldFileName)
+      );
+      expect(mockFs.unlink).not.toHaveBeenCalledWith(
+        path.join(testDir, activeFileName)
+      );
     });
   });
 

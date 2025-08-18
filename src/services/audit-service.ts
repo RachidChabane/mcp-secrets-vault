@@ -90,9 +90,14 @@ export class JsonlAuditService implements AuditService {
     const filteredEntries = this.filterEntries(allEntries, options);
     const sortedEntries = this.sortEntries(filteredEntries);
     
-    const page = options?.page ?? CONFIG.DEFAULT_PAGE_NUMBER;
+    // Coerce page to valid minimum
+    const rawPage = options?.page ?? CONFIG.DEFAULT_PAGE_NUMBER;
+    const page = Math.max(rawPage, CONFIG.DEFAULT_PAGE_NUMBER);
+    
+    // Coerce pageSize to valid range
+    const rawPageSize = options?.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE;
     const pageSize = Math.min(
-      options?.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE,
+      Math.max(rawPageSize, CONFIG.DEFAULT_PAGE_NUMBER),
       CONFIG.AUDIT_MAX_PAGE_SIZE
     );
     
@@ -112,8 +117,14 @@ export class JsonlAuditService implements AuditService {
   async cleanup(maxAgeMs: number): Promise<void> {
     const files = await this.getAuditFiles();
     const cutoffTime = Date.now() - maxAgeMs;
+    const activeFile = await this.getCurrentFile();
 
     for (const file of files) {
+      // Never delete the active audit file
+      if (file.path === activeFile) {
+        continue;
+      }
+      
       if (file.createdAt.getTime() < cutoffTime) {
         await fs.unlink(file.path);
       }
@@ -214,7 +225,8 @@ export class JsonlAuditService implements AuditService {
   ): Promise<AuditEntry[]> {
     try {
       const content = await fs.readFile(filePath, CONFIG.DEFAULT_ENCODING);
-      const lines = content.split('\n').filter(line => line.trim());
+      // Handle both LF and CRLF line endings
+      const lines = content.split(/\r?\n/).filter(line => line.trim());
       const entries: AuditEntry[] = [];
       
       for (const line of lines) {
