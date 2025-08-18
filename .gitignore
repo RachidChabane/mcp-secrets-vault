@@ -90,3 +90,6 @@ temp/
 # Output
 output/
 results/
+
+# Quality reports
+quality-report*.md
