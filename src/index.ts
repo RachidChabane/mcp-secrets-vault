@@ -6,7 +6,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { CONFIG } from './constants/config-constants.js';
 import { TEXT } from './constants/text-constants.js';
 import { EnvSecretProvider } from './services/env-secret-provider.js';
+import { PolicyProviderService } from './services/policy-provider.service.js';
 import { DiscoverTool } from './tools/discover-tool.js';
+import { DescribePolicyTool } from './tools/describe-policy-tool.js';
 import { SecretMapping } from './interfaces/secret-mapping.interface.js';
 import { writeError } from './utils/logging.js';
 import { ToolError } from './utils/errors.js';
@@ -76,11 +78,14 @@ function createSuccessResponse(
 async function executeTool(
   name: string, 
   args: unknown,
-  discoverTool: DiscoverTool
+  discoverTool: DiscoverTool,
+  describePolicyTool: DescribePolicyTool
 ): Promise<unknown> {
   switch (name) {
     case TEXT.TOOL_DISCOVER:
       return await discoverTool.execute(args);
+    case TEXT.TOOL_DESCRIBE:
+      return await describePolicyTool.execute(args);
     default:
       throw new ToolError(
         TEXT.ERROR_UNKNOWN_TOOL,
@@ -102,17 +107,23 @@ async function main(): Promise<void> {
     }
   );
 
-  // Load mappings and initialize provider
+  // Load mappings and initialize providers
   const mappings = await loadMappings();
   const secretProvider = new EnvSecretProvider(mappings);
+  const policyProvider = new PolicyProviderService();
+  
+  // Load policies
+  await policyProvider.loadPolicies();
   
   // Initialize tools
   const discoverTool = new DiscoverTool(secretProvider);
+  const describePolicyTool = new DescribePolicyTool(policyProvider);
   
   // Register tool listing handler
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       discoverTool.getTool(),
+      describePolicyTool.getTool(),
     ],
   }));
 
@@ -121,7 +132,7 @@ async function main(): Promise<void> {
     const { name, arguments: args } = request.params;
     
     try {
-      const result = await executeTool(name, args, discoverTool);
+      const result = await executeTool(name, args, discoverTool, describePolicyTool);
       return createSuccessResponse(result);
     } catch (error) {
       return createErrorResponse(error, name);
