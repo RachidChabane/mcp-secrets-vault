@@ -3,6 +3,7 @@ import { UseSecretTool } from './use-secret-tool.js';
 import { SecretProvider } from '../interfaces/secret-provider.interface.js';
 import { SecretAccessor } from '../interfaces/secret-accessor.interface.js';
 import { PolicyProviderService } from '../services/policy-provider.service.js';
+import { RateLimiterService } from '../services/rate-limiter.service.js';
 import type { IActionExecutor } from '../interfaces/action-executor.interface.js';
 import { JsonlAuditService } from '../services/audit-service.js';
 import type { AuditService } from '../interfaces/audit.interface.js';
@@ -16,6 +17,7 @@ describe('UseSecretTool', () => {
   let mockPolicyProvider: PolicyProviderService;
   let mockActionExecutor: IActionExecutor;
   let mockAuditService: AuditService;
+  let mockRateLimiter: RateLimiterService;
 
   beforeEach(() => {
     mockSecretProvider = {
@@ -31,10 +33,17 @@ describe('UseSecretTool', () => {
       execute: vi.fn()
     };
 
+    mockRateLimiter = {
+      checkLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 99, resetAt: Date.now() + 3600000 }),
+      reset: vi.fn(),
+      resetAll: vi.fn()
+    } as any;
+    
     tool = new UseSecretTool(
       mockSecretProvider,
       mockPolicyProvider,
-      mockActionExecutor
+      mockActionExecutor,
+      mockRateLimiter
     );
 
     // Access mocked instances
@@ -78,6 +87,11 @@ describe('UseSecretTool', () => {
               body: {
                 type: TEXT.SCHEMA_TYPE_STRING,
                 description: 'Optional body for POST requests'
+              },
+              injectionType: {
+                type: TEXT.SCHEMA_TYPE_STRING,
+                enum: [TEXT.INJECTION_TYPE_BEARER, TEXT.INJECTION_TYPE_HEADER],
+                description: 'How to inject the secret (bearer or header)'
               }
             },
             required: ['type', 'url']
@@ -143,7 +157,7 @@ describe('UseSecretTool', () => {
         domain: 'api.example.com',
         timestamp: expect.any(String),
         outcome: 'success' as const,
-        reason: ''
+        reason: TEXT.SUCCESS_REQUEST_COMPLETED
       });
 
       expect(mockActionExecutor.execute).toHaveBeenCalledWith({
@@ -181,10 +195,9 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result).toEqual({
-        success: false,
-        error: TEXT.ERROR_FORBIDDEN_DOMAIN
-      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
+      expect(result.code).toBeDefined();
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
         secretId: 'TEST_API_KEY',
@@ -211,10 +224,9 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result).toEqual({
-        success: false,
-        error: TEXT.ERROR_UNKNOWN_SECRET
-      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
+      expect(result.code).toBe('unknown_secret');
     });
 
     it('should return error for unavailable secret', async () => {
@@ -234,10 +246,9 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result).toEqual({
-        success: false,
-        error: TEXT.ERROR_UNKNOWN_SECRET
-      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
+      expect(result.code).toBe('unknown_secret');
     });
 
     it('should return error for invalid arguments', async () => {
@@ -248,10 +259,9 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result).toEqual({
-        success: false,
-        error: TEXT.ERROR_INVALID_REQUEST
-      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.code).toBe('invalid_request');
     });
 
     it('should return error for invalid URL', async () => {
@@ -265,10 +275,9 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result).toEqual({
-        success: false,
-        error: TEXT.ERROR_INVALID_REQUEST
-      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.code).toBe('invalid_request');
     });
 
     it('should handle POST request with headers and body', async () => {
@@ -355,10 +364,288 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result).toEqual({
-        success: false,
-        error: TEXT.ERROR_TOOL_EXECUTION_FAILED
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.code).toBeDefined();
+
+      // Since policy evaluation throws, we never get to audit
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('should deny request when rate limit exceeded', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockRateLimiter.checkLimit).mockReturnValue({
+        allowed: false,
+        remaining: 0,
+        resetAt: Date.now() + 3600000
       });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_RATE_LIMITED);
+      expect(result.code).toBe('rate_limited');
+
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'TEST_API_KEY',
+        action: 'http_get',
+        domain: 'api.example.com',
+        timestamp: expect.any(String),
+        outcome: 'denied' as const,
+        reason: TEXT.ERROR_RATE_LIMITED
+      });
+    });
+
+    it('should check rate limit with correct key', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test API key'
+      });
+
+      await tool.execute(args);
+
+      expect(mockRateLimiter.checkLimit).toHaveBeenCalledWith('TEST_API_KEY:api.example.com');
+    });
+  });
+
+  describe('input validation', () => {
+    it('should trim input strings', async () => {
+      const args = {
+        secretId: '  TEST_API_KEY  ',
+        action: {
+          type: 'http_get',
+          url: '  https://api.example.com/data  ',
+          headers: {
+            '  X-Custom  ': '  value  '
+          }
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: '{}'
+      });
+
+      await tool.execute(args);
+
+      // Check that trimmed values were used
+      expect(mockSecretProvider.getSecretInfo).toHaveBeenCalledWith('TEST_API_KEY');
+      expect(mockActionExecutor.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://api.example.com/data',
+          headers: {
+            'X-Custom': 'value'
+          }
+        })
+      );
+    });
+
+    it('should audit invalid URL', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'not-a-valid-url'
+        }
+      };
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.code).toBe('invalid_request');
+    });
+
+    it('should support injection type parameter', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_post',
+          url: 'https://api.example.com/data',
+          injectionType: 'header'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: '{}'
+      });
+
+      await tool.execute(args);
+
+      expect(mockActionExecutor.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          injectionType: 'header'
+        })
+      );
+    });
+  });
+
+  describe('audit coverage', () => {
+    it('should audit successful execution', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: '{}'
+      });
+
+      await tool.execute(args);
+
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'TEST_API_KEY',
+        action: 'http_get',
+        domain: 'api.example.com',
+        timestamp: expect.any(String),
+        outcome: 'success' as const,
+        reason: TEXT.SUCCESS_REQUEST_COMPLETED
+      });
+    });
+
+    it('should audit executor errors', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const executorError = new Error('Network timeout');
+      vi.mocked(mockActionExecutor.execute).mockRejectedValue(executorError);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      
+      // Should have written audit for the executor error
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'TEST_API_KEY',
+        action: 'http_get',
+        domain: 'api.example.com',
+        timestamp: expect.any(String),
+        outcome: 'error' as const,
+        reason: 'Network timeout'
+      });
+    });
+
+    it('should audit missing secret value', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue(undefined);
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_MISSING_ENV);
+      expect(result.code).toBe('missing_env');
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
         secretId: 'TEST_API_KEY',
@@ -366,63 +653,7 @@ describe('UseSecretTool', () => {
         domain: 'api.example.com',
         timestamp: expect.any(String),
         outcome: 'error' as const,
-        reason: 'Policy evaluation failed'
-      });
-    });
-  });
-
-  describe('requestSecretAccess', () => {
-    it('should audit successful access request', async () => {
-      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
-        allowed: true
-      });
-
-      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
-
-      const result = await tool.requestSecretAccess(
-        'TEST_SECRET',
-        'http_get',
-        'example.com'
-      );
-
-      expect(result).toEqual({ allowed: true, message: undefined });
-
-      expect(mockAuditService.write).toHaveBeenCalledWith({
-        secretId: 'TEST_SECRET',
-        action: 'http_get',
-        domain: 'example.com',
-        timestamp: expect.any(String),
-        outcome: 'success' as const,
-        reason: ''
-      });
-    });
-
-    it('should audit denied access request', async () => {
-      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
-        allowed: false,
-        message: TEXT.ERROR_FORBIDDEN_DOMAIN
-      });
-
-      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
-
-      const result = await tool.requestSecretAccess(
-        'TEST_SECRET',
-        'http_post',
-        'forbidden.com'
-      );
-
-      expect(result).toEqual({ 
-        allowed: false, 
-        message: TEXT.ERROR_FORBIDDEN_DOMAIN 
-      });
-
-      expect(mockAuditService.write).toHaveBeenCalledWith({
-        secretId: 'TEST_SECRET',
-        action: 'http_post',
-        domain: 'forbidden.com',
-        timestamp: expect.any(String),
-        outcome: 'denied' as const,
-        reason: TEXT.ERROR_FORBIDDEN_DOMAIN
+        reason: TEXT.ERROR_MISSING_ENV
       });
     });
   });

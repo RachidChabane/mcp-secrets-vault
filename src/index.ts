@@ -8,6 +8,7 @@ import { TEXT } from './constants/text-constants.js';
 import { EnvSecretProvider } from './services/env-secret-provider.js';
 import { PolicyProviderService } from './services/policy-provider.service.js';
 import { HttpActionExecutor } from './services/http-action-executor.service.js';
+import { RateLimiterService } from './services/rate-limiter.service.js';
 import { DiscoverTool } from './tools/discover-tool.js';
 import { DescribePolicyTool } from './tools/describe-policy-tool.js';
 import { UseSecretTool } from './tools/use-secret-tool.js';
@@ -117,6 +118,7 @@ async function main(): Promise<void> {
   const secretProvider = new EnvSecretProvider(mappings);
   const policyProvider = new PolicyProviderService();
   const actionExecutor = new HttpActionExecutor();
+  const rateLimiter = new RateLimiterService();
   
   // Load policies
   await policyProvider.loadPolicies();
@@ -124,7 +126,7 @@ async function main(): Promise<void> {
   // Initialize tools
   const discoverTool = new DiscoverTool(secretProvider);
   const describePolicyTool = new DescribePolicyTool(policyProvider);
-  const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor);
+  const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
   
   // Register tool listing handler
   server.setRequestHandler(ListToolsRequestSchema, async () => ({

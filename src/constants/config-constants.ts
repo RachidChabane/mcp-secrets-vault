@@ -76,6 +76,10 @@ export const CONFIG = {
   ERROR_CODE_NO_POLICY: 'no_policy',
   ERROR_CODE_POLICIES_NOT_LOADED: 'policies_not_loaded',
   ERROR_CODE_UNKNOWN_TOOL: 'unknown_tool',
+  ERROR_CODE_INVALID_METHOD: 'invalid_method',
+  ERROR_CODE_INVALID_INJECTION_TYPE: 'invalid_injection_type',
+  ERROR_CODE_INVALID_URL: 'invalid_url',
+  ERROR_CODE_INVALID_HEADERS: 'invalid_headers',
   
   // Pagination
   DEFAULT_PAGE_NUMBER: 1,

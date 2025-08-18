@@ -4,29 +4,41 @@ import type { IActionExecutor } from '../interfaces/action-executor.interface.js
 import { SecretAccessor } from '../interfaces/secret-accessor.interface.js';
 import { JsonlAuditService } from '../services/audit-service.js';
 import { PolicyProviderService } from '../services/policy-provider.service.js';
+import { RateLimiterService } from '../services/rate-limiter.service.js';
 import type { AuditService } from '../interfaces/audit.interface.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
 import { ToolError } from '../utils/errors.js';
+import { writeError } from '../utils/logging.js';
 import { z } from 'zod';
 
 const UseSecretSchema = z.object({
-  secretId: z.string().min(1),
+  secretId: z.string().min(1).transform(s => s.trim()),
   action: z.object({
-    type: z.enum(['http_get', 'http_post']),
-    url: z.string().url(),
-    headers: z.record(z.string()).optional(),
-    body: z.string().optional()
+    type: z.enum([TEXT.HTTP_METHOD_GET, TEXT.HTTP_METHOD_POST]),
+    url: z.string().url().transform(s => s.trim()),
+    headers: z.record(z.string()).optional().transform(h => {
+      if (!h) return undefined;
+      const trimmed: Record<string, string> = {};
+      for (const [key, value] of Object.entries(h)) {
+        trimmed[key.trim()] = value.trim();
+      }
+      return trimmed;
+    }),
+    body: z.string().optional().transform(s => s?.trim()),
+    injectionType: z.enum([TEXT.INJECTION_TYPE_BEARER, TEXT.INJECTION_TYPE_HEADER])
+      .default(TEXT.INJECTION_TYPE_BEARER)
   })
 });
 
 export interface UseSecretArgs {
   readonly secretId: string;
   readonly action: {
-    readonly type: 'http_get' | 'http_post';
+    readonly type: typeof TEXT.HTTP_METHOD_GET | typeof TEXT.HTTP_METHOD_POST;
     readonly url: string;
     readonly headers?: Record<string, string>;
     readonly body?: string;
+    readonly injectionType?: typeof TEXT.INJECTION_TYPE_BEARER | typeof TEXT.INJECTION_TYPE_HEADER;
   };
 }
 
@@ -34,18 +46,22 @@ export interface UseSecretResponse {
   readonly success: boolean;
   readonly result?: unknown;
   readonly error?: string;
+  readonly code?: string;
 }
 
 export class UseSecretTool {
   private readonly tool: Tool;
   private readonly auditService: AuditService;
+  private readonly rateLimiter: RateLimiterService;
 
   constructor(
     private readonly secretProvider: SecretProvider & SecretAccessor,
     private readonly policyProvider: PolicyProviderService,
-    private readonly actionExecutor: IActionExecutor
+    private readonly actionExecutor: IActionExecutor,
+    rateLimiter?: RateLimiterService
   ) {
     this.auditService = new JsonlAuditService();
+    this.rateLimiter = rateLimiter || new RateLimiterService();
     
     this.tool = {
       name: TEXT.TOOL_USE,
@@ -77,6 +93,11 @@ export class UseSecretTool {
               body: {
                 type: TEXT.SCHEMA_TYPE_STRING,
                 description: 'Optional body for POST requests'
+              },
+              injectionType: {
+                type: TEXT.SCHEMA_TYPE_STRING,
+                enum: [TEXT.INJECTION_TYPE_BEARER, TEXT.INJECTION_TYPE_HEADER],
+                description: 'How to inject the secret (bearer or header)'
               }
             },
             required: ['type', 'url']
@@ -91,60 +112,77 @@ export class UseSecretTool {
     return this.tool;
   }
 
-  async requestSecretAccess(
-    secretId: string,
-    action: string,
-    domain: string
-  ): Promise<{ allowed: boolean; message?: string }> {
-    try {
-      const decision = this.policyProvider.evaluate(
-        secretId,
-        action,
-        domain
-      );
-      
-      await this.auditService.write({
-        secretId,
-        action,
-        domain,
-        timestamp: new Date().toISOString(),
-        outcome: decision.allowed ? 'success' as const : 'denied' as const,
-        reason: decision.message || ''
-      });
-      
-      return decision;
-    } catch (error) {
-      await this.auditService.write({
-        secretId,
-        action,
-        domain,
-        timestamp: new Date().toISOString(),
-        outcome: 'error' as const,
-        reason: error instanceof Error ? error.message : TEXT.ERROR_TOOL_EXECUTION_FAILED
-      });
-      throw error;
-    }
-  }
 
   async execute(args: unknown): Promise<UseSecretResponse> {
+    let secretId: string | undefined;
+    let action: any;
+    let domain: string | undefined;
+    
     try {
+      // Validate and trim inputs
       const validatedArgs = UseSecretSchema.parse(args) as UseSecretArgs;
-      const { secretId, action } = validatedArgs;
+      secretId = validatedArgs.secretId;
+      action = validatedArgs.action;
       
-      // Extract domain from URL
-      const url = new URL(action.url);
-      const domain = url.hostname;
-      
-      // Check if secret exists
-      const secretInfo = this.secretProvider.getSecretInfo(secretId);
-      if (!secretInfo) {
+      // Extract and validate domain
+      let url: URL;
+      try {
+        url = new URL(action.url);
+        domain = url.hostname;
+      } catch {
+        await this.auditService.write({
+          secretId: secretId || 'unknown',
+          action: action?.type || 'unknown',
+          domain: 'invalid',
+          timestamp: new Date().toISOString(),
+          outcome: 'denied' as const,
+          reason: TEXT.ERROR_INVALID_URL
+        });
         throw new ToolError(
-          TEXT.ERROR_UNKNOWN_SECRET,
-          CONFIG.ERROR_CODE_UNKNOWN_SECRET
+          TEXT.ERROR_INVALID_URL,
+          CONFIG.ERROR_CODE_INVALID_URL
         );
       }
       
-      if (!secretInfo.available) {
+      // Check rate limit first
+      const rateLimitKey = `${secretId}:${domain}`;
+      const rateCheck = this.rateLimiter.checkLimit(rateLimitKey);
+      
+      if (!rateCheck.allowed) {
+        await this.auditService.write({
+          secretId,
+          action: action.type,
+          domain,
+          timestamp: new Date().toISOString(),
+          outcome: 'denied' as const,
+          reason: TEXT.ERROR_RATE_LIMITED
+        });
+        
+        writeError(TEXT.ERROR_RATE_LIMITED, {
+          level: 'WARN',
+          code: CONFIG.ERROR_CODE_RATE_LIMITED,
+          secretId,
+          domain
+        });
+        
+        throw new ToolError(
+          TEXT.ERROR_RATE_LIMITED,
+          CONFIG.ERROR_CODE_RATE_LIMITED
+        );
+      }
+      
+      // Check if secret exists
+      const secretInfo = this.secretProvider.getSecretInfo(secretId);
+      if (!secretInfo || !secretInfo.available) {
+        await this.auditService.write({
+          secretId,
+          action: action.type,
+          domain,
+          timestamp: new Date().toISOString(),
+          outcome: 'denied' as const,
+          reason: TEXT.ERROR_UNKNOWN_SECRET
+        });
+        
         throw new ToolError(
           TEXT.ERROR_UNKNOWN_SECRET,
           CONFIG.ERROR_CODE_UNKNOWN_SECRET
@@ -152,60 +190,145 @@ export class UseSecretTool {
       }
       
       // Check policy
-      const accessDecision = await this.requestSecretAccess(
+      const accessDecision = this.policyProvider.evaluate(
         secretId,
         action.type,
         domain
       );
       
       if (!accessDecision.allowed) {
-        throw new ToolError(
-          accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION,
-          CONFIG.ERROR_CODE_FORBIDDEN_ACTION
-        );
+        await this.auditService.write({
+          secretId,
+          action: action.type,
+          domain,
+          timestamp: new Date().toISOString(),
+          outcome: 'denied' as const,
+          reason: accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION
+        });
+        
+        const errorCode = accessDecision.code || CONFIG.ERROR_CODE_FORBIDDEN_ACTION;
+        const errorMessage = accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION;
+        
+        throw new ToolError(errorMessage, errorCode);
       }
       
       // Get secret value
       const secretValue = this.secretProvider.getSecretValue(secretId);
       if (!secretValue) {
+        await this.auditService.write({
+          secretId,
+          action: action.type,
+          domain,
+          timestamp: new Date().toISOString(),
+          outcome: 'error' as const,
+          reason: TEXT.ERROR_MISSING_ENV
+        });
+        
         throw new ToolError(
-          TEXT.ERROR_UNKNOWN_SECRET,
-          CONFIG.ERROR_CODE_UNKNOWN_SECRET
+          TEXT.ERROR_MISSING_ENV,
+          CONFIG.ERROR_CODE_MISSING_ENV
         );
       }
       
       // Execute action with secret
-      const result = await this.actionExecutor.execute({
-        method: action.type === 'http_get' ? 'GET' : 'POST',
-        url: action.url,
-        headers: action.headers,
-        body: action.body,
-        secretValue,
-        injectionType: 'bearer'
-      });
+      let result;
+      try {
+        result = await this.actionExecutor.execute({
+          method: action.type === TEXT.HTTP_METHOD_GET ? 'GET' : 'POST',
+          url: action.url,
+          headers: action.headers,
+          body: action.body,
+          secretValue,
+          injectionType: action.injectionType || TEXT.INJECTION_TYPE_BEARER
+        });
+        
+        // Audit success
+        await this.auditService.write({
+          secretId,
+          action: action.type,
+          domain,
+          timestamp: new Date().toISOString(),
+          outcome: 'success' as const,
+          reason: TEXT.SUCCESS_REQUEST_COMPLETED
+        });
+      } catch (executorError) {
+        // Audit executor error
+        await this.auditService.write({
+          secretId,
+          action: action.type,
+          domain,
+          timestamp: new Date().toISOString(),
+          outcome: 'error' as const,
+          reason: executorError instanceof Error 
+            ? executorError.message 
+            : TEXT.ERROR_NETWORK_ERROR
+        });
+        
+        throw executorError;
+      }
       
       return {
         success: true,
         result
       };
     } catch (error) {
+      // Log structured error
       if (error instanceof ToolError) {
+        writeError(error.message, {
+          level: 'ERROR',
+          code: error.code,
+          secretId,
+          domain
+        });
+        
         return {
           success: false,
-          error: error.message
+          error: error.message,
+          code: error.code
         };
       }
       
       if (error instanceof z.ZodError) {
+        const errorMessage = TEXT.ERROR_INVALID_REQUEST;
+        
+        // Audit invalid request
+        if (secretId || action) {
+          await this.auditService.write({
+            secretId: secretId || 'unknown',
+            action: action?.type || 'unknown',
+            domain: domain || 'unknown',
+            timestamp: new Date().toISOString(),
+            outcome: 'denied' as const,
+            reason: errorMessage
+          });
+        }
+        
+        writeError(errorMessage, {
+          level: 'ERROR',
+          code: CONFIG.ERROR_CODE_INVALID_REQUEST,
+          details: error.errors
+        });
+        
         return {
           success: false,
-          error: TEXT.ERROR_INVALID_REQUEST
+          error: errorMessage,
+          code: CONFIG.ERROR_CODE_INVALID_REQUEST
         };
       }
       
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : TEXT.ERROR_TOOL_EXECUTION_FAILED;
+        
+      writeError(errorMessage, {
+        level: 'ERROR',
+        code: CONFIG.ERROR_CODE_UNKNOWN_TOOL
+      });
+      
       return {
         success: false,
-        error: TEXT.ERROR_TOOL_EXECUTION_FAILED
+        error: errorMessage,
+        code: CONFIG.ERROR_CODE_UNKNOWN_TOOL
       };
     }
   }

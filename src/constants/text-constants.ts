@@ -36,6 +36,10 @@ export const TEXT = {
   ERROR_EMPTY_HEADER_NAME: 'Header name cannot be empty',
   ERROR_UNKNOWN_TOOL: 'Unknown tool requested',
   ERROR_TOOL_EXECUTION_FAILED: 'Tool execution failed',
+  ERROR_INVALID_METHOD: 'Invalid HTTP method',
+  ERROR_INVALID_INJECTION_TYPE: 'Invalid injection type',
+  ERROR_INVALID_URL: 'Invalid URL format',
+  ERROR_INVALID_HEADERS: 'Invalid headers format',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',
@@ -87,6 +91,10 @@ export const TEXT = {
   // HTTP methods
   HTTP_METHOD_GET: 'http_get',
   HTTP_METHOD_POST: 'http_post',
+  
+  // Injection types
+  INJECTION_TYPE_BEARER: 'bearer',
+  INJECTION_TYPE_HEADER: 'header',
   
   // Response messages
   RESPONSE_NO_SECRETS: 'No secrets configured',
