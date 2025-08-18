@@ -32,6 +32,8 @@ export const TEXT = {
   ERROR_DUPLICATE_POLICY: 'Duplicate policy for secret ID',
   ERROR_UNSUPPORTED_ACTION: 'Unsupported action',
   ERROR_POLICIES_NOT_LOADED: 'Policies not loaded',
+  ERROR_NETWORK_ERROR: 'Network request failed',
+  ERROR_EMPTY_HEADER_NAME: 'Header name cannot be empty',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',

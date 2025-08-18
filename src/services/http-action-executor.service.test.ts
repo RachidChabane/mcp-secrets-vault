@@ -47,9 +47,10 @@ describe('HttpActionExecutor', () => {
           expect.objectContaining({
             method: 'GET',
             headers: expect.objectContaining({
-              'authorization': 'Bearer secret123',
-              'user-agent': CONFIG.HTTP_DEFAULT_USER_AGENT
-            })
+              [CONFIG.HEADER_AUTHORIZATION]: 'Bearer secret123',
+              [CONFIG.HEADER_USER_AGENT]: CONFIG.HTTP_DEFAULT_USER_AGENT
+            }),
+            redirect: CONFIG.FETCH_REDIRECT_MODE
           })
         );
         
@@ -83,8 +84,9 @@ describe('HttpActionExecutor', () => {
             method: 'GET',
             headers: expect.objectContaining({
               'x-api-key': 'api-key-123',
-              'user-agent': CONFIG.HTTP_DEFAULT_USER_AGENT
-            })
+              [CONFIG.HEADER_USER_AGENT]: CONFIG.HTTP_DEFAULT_USER_AGENT
+            }),
+            redirect: CONFIG.FETCH_REDIRECT_MODE
           })
         );
         
@@ -120,10 +122,11 @@ describe('HttpActionExecutor', () => {
             method: 'POST',
             body: JSON.stringify({ name: 'test', value: 123 }),
             headers: expect.objectContaining({
-              'authorization': 'Bearer secret456',
-              'content-type': 'application/json',
-              'user-agent': CONFIG.HTTP_DEFAULT_USER_AGENT
-            })
+              [CONFIG.HEADER_AUTHORIZATION]: 'Bearer secret456',
+              [CONFIG.HEADER_CONTENT_TYPE]: 'application/json',
+              [CONFIG.HEADER_USER_AGENT]: CONFIG.HTTP_DEFAULT_USER_AGENT
+            }),
+            redirect: CONFIG.FETCH_REDIRECT_MODE
           })
         );
         
@@ -159,8 +162,9 @@ describe('HttpActionExecutor', () => {
             headers: expect.objectContaining({
               'x-webhook-secret': 'webhook-secret',
               'x-custom-header': 'custom-value',
-              'user-agent': CONFIG.HTTP_DEFAULT_USER_AGENT
-            })
+              [CONFIG.HEADER_USER_AGENT]: CONFIG.HTTP_DEFAULT_USER_AGENT
+            }),
+            redirect: CONFIG.FETCH_REDIRECT_MODE
           })
         );
         
@@ -169,6 +173,35 @@ describe('HttpActionExecutor', () => {
     });
     
     describe('Response sanitization', () => {
+      it('should normalize header keys to lowercase', async () => {
+        const mockResponse = new Response('OK', {
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Rate-Limit-Remaining': '50',
+            'CACHE-CONTROL': 'no-cache'
+          }
+        });
+        mockFetch.mockResolvedValueOnce(mockResponse);
+        
+        const request: ActionRequest = {
+          method: 'GET',
+          url: 'https://api.example.com/data',
+          secretValue: 'secret',
+          injectionType: 'bearer'
+        };
+        
+        const response = await executor.execute(request);
+        
+        // All headers should be lowercase
+        expect(response.headers).toHaveProperty('content-type');
+        expect(response.headers).toHaveProperty('x-rate-limit-remaining');
+        expect(response.headers).toHaveProperty('cache-control');
+        expect(response.headers).not.toHaveProperty('Content-Type');
+        expect(response.headers).not.toHaveProperty('CACHE-CONTROL');
+      });
+      
       it('should filter out non-allowed headers', async () => {
         const mockResponse = new Response('OK', {
           status: 200,
@@ -291,7 +324,7 @@ describe('HttpActionExecutor', () => {
         const response = await executor.execute(request);
         
         expect(response.statusCode).toBe(0);
-        expect(response.statusText).toBe('Error');
+        expect(response.statusText).toBe(TEXT.ERROR_NETWORK_ERROR);
         expect(response.error).toBeDefined();
         expect(response.error).not.toContain('secret');
       });
@@ -337,7 +370,19 @@ describe('HttpActionExecutor', () => {
           injectionType: 'header'
         };
         
-        await expect(executor.execute(request)).rejects.toThrow(TEXT.ERROR_INVALID_REQUEST);
+        await expect(executor.execute(request)).rejects.toThrow(TEXT.ERROR_EMPTY_HEADER_NAME);
+      });
+      
+      it('should handle empty header name for header injection', async () => {
+        const request: ActionRequest = {
+          method: 'GET',
+          url: 'https://api.example.com/data',
+          secretValue: 'secret',
+          injectionType: 'header',
+          headerName: '   '
+        };
+        
+        await expect(executor.execute(request)).rejects.toThrow(TEXT.ERROR_EMPTY_HEADER_NAME);
       });
     });
     
@@ -370,6 +415,65 @@ describe('HttpActionExecutor', () => {
         expect(response.statusCode).toBe(statusCode);
         expect(response.statusText).toBe(statusText);
         expect(response.body).toBe('Error occurred');
+      });
+    });
+    
+    describe('Redirect safety', () => {
+      it('should not follow redirects', async () => {
+        const mockResponse = new Response(null, {
+          status: 302,
+          statusText: 'Found',
+          headers: {
+            'location': 'https://evil.com/steal'
+          }
+        });
+        mockFetch.mockResolvedValueOnce(mockResponse);
+        
+        const request: ActionRequest = {
+          method: 'GET',
+          url: 'https://api.example.com/data',
+          secretValue: 'secret123',
+          injectionType: 'bearer'
+        };
+        
+        const response = await executor.execute(request);
+        
+        // Should return the redirect response, not follow it
+        expect(response.statusCode).toBe(302);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch).toHaveBeenCalledWith(
+          'https://api.example.com/data',
+          expect.objectContaining({
+            redirect: 'manual'
+          })
+        );
+      });
+      
+      it('should handle redirect responses without following', async () => {
+        const mockResponse = new Response('Redirecting...', {
+          status: 301,
+          statusText: 'Moved Permanently',
+          headers: {
+            'location': 'https://different-domain.com/resource'
+          }
+        });
+        mockFetch.mockResolvedValueOnce(mockResponse);
+        
+        const request: ActionRequest = {
+          method: 'POST',
+          url: 'https://api.example.com/submit',
+          body: { data: 'test' },
+          secretValue: 'api-key-456',
+          injectionType: 'header',
+          headerName: 'X-API-Key'
+        };
+        
+        const response = await executor.execute(request);
+        
+        expect(response.statusCode).toBe(301);
+        expect(response.body).toBe('Redirecting...');
+        // Verify fetch was only called once (no follow)
+        expect(mockFetch).toHaveBeenCalledTimes(1);
       });
     });
     
