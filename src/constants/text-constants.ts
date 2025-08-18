@@ -100,7 +100,8 @@ export const TEXT = {
   TOOL_DESC_DISCOVER: 'List available secret identifiers',
   TOOL_DESC_DESCRIBE: 'Get policy details for a secret',
   TOOL_DESC_USE: 'Use a secret to perform an action',
-  TOOL_DESC_AUDIT: 'Query audit log entries'
+  TOOL_DESC_AUDIT: 'Query audit log entries',
+  TOOL_DISCOVER_DESCRIPTION: 'List all available secret identifiers with their metadata'
 } as const;
 
 export type TextKey = keyof typeof TEXT;
