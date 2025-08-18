@@ -87,7 +87,7 @@ export const TEXT = {
   // Audit outcomes
   AUDIT_OUTCOME_SUCCESS: 'success',
   AUDIT_OUTCOME_DENIED: 'denied',
-  AUDIT_OUTCOME_ERROR: 'failure',
+  AUDIT_OUTCOME_ERROR: 'error',
   
   // HTTP methods
   HTTP_METHOD_GET: 'http_get',
@@ -124,6 +124,13 @@ export const TEXT = {
   
   // Input field descriptions
   INPUT_DESC_SECRET_ID: 'The ID of the secret to describe policy for',
+  INPUT_DESC_USE_SECRET_ID: 'The ID of the secret to use',
+  INPUT_DESC_ACTION: 'The action to perform with the secret',
+  INPUT_DESC_ACTION_TYPE: 'The type of action to perform',
+  INPUT_DESC_ACTION_URL: 'The URL to make the request to',
+  INPUT_DESC_ACTION_HEADERS: 'Optional headers for the request',
+  INPUT_DESC_ACTION_BODY: 'Optional body for POST requests',
+  INPUT_DESC_INJECTION_TYPE: 'How to inject the secret (bearer or header)',
   
   // Schema types
   SCHEMA_TYPE_OBJECT: 'object',

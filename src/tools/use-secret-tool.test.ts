@@ -66,7 +66,7 @@ describe('UseSecretTool', () => {
         properties: {
           secretId: {
             type: TEXT.SCHEMA_TYPE_STRING,
-            description: 'The ID of the secret to use'
+            description: TEXT.INPUT_DESC_USE_SECRET_ID
           },
           action: {
             type: TEXT.SCHEMA_TYPE_OBJECT,
@@ -74,25 +74,25 @@ describe('UseSecretTool', () => {
               type: {
                 type: TEXT.SCHEMA_TYPE_STRING,
                 enum: [TEXT.HTTP_METHOD_GET, TEXT.HTTP_METHOD_POST],
-                description: 'The type of action to perform'
+                description: TEXT.INPUT_DESC_ACTION_TYPE
               },
               url: {
                 type: TEXT.SCHEMA_TYPE_STRING,
-                description: 'The URL to make the request to'
+                description: TEXT.INPUT_DESC_ACTION_URL
               },
               headers: {
                 type: TEXT.SCHEMA_TYPE_OBJECT,
-                description: 'Optional headers for the request',
+                description: TEXT.INPUT_DESC_ACTION_HEADERS,
                 additionalProperties: { type: TEXT.SCHEMA_TYPE_STRING }
               },
               body: {
                 type: TEXT.SCHEMA_TYPE_STRING,
-                description: 'Optional body for POST requests'
+                description: TEXT.INPUT_DESC_ACTION_BODY
               },
               injectionType: {
                 type: TEXT.SCHEMA_TYPE_STRING,
                 enum: [TEXT.INJECTION_TYPE_BEARER, TEXT.INJECTION_TYPE_HEADER],
-                description: 'How to inject the secret (bearer or header)'
+                description: TEXT.INPUT_DESC_INJECTION_TYPE
               }
             },
             required: ['type', 'url']
@@ -157,7 +157,7 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'api.example.com',
         timestamp: expect.any(String),
-        outcome: 'success' as const,
+        outcome: TEXT.AUDIT_OUTCOME_SUCCESS,
         reason: TEXT.SUCCESS_REQUEST_COMPLETED
       });
 
@@ -205,7 +205,7 @@ describe('UseSecretTool', () => {
         action: 'http_post',
         domain: 'forbidden.com',
         timestamp: expect.any(String),
-        outcome: 'denied' as const,
+        outcome: TEXT.AUDIT_OUTCOME_DENIED,
         reason: TEXT.ERROR_FORBIDDEN_DOMAIN
       });
 
@@ -411,7 +411,7 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'api.example.com',
         timestamp: expect.any(String),
-        outcome: 'denied' as const,
+        outcome: TEXT.AUDIT_OUTCOME_DENIED,
         reason: TEXT.ERROR_RATE_LIMITED
       });
     });
@@ -542,6 +542,128 @@ describe('UseSecretTool', () => {
         })
       );
     });
+
+    it('should handle invalid action type with specific error', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'DELETE', // Invalid method
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_METHOD);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_METHOD);
+    });
+
+    it('should handle invalid injection type with specific error', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data',
+          injectionType: 'custom' // Invalid injection type
+        }
+      };
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_INJECTION_TYPE);
+      expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE);
+    });
+
+    it('should trim action.type before enum validation', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: '  http_get  ', // Action type with spaces
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: '{}'
+      });
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(true);
+      
+      // Verify that the trimmed value was used in execution
+      expect(mockActionExecutor.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: TEXT.HTTP_VERB_GET
+        })
+      );
+    });
+
+    it('should trim injectionType before enum validation', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data',
+          injectionType: '  header  ' // Injection type with spaces
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: '{}'
+      });
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(true);
+      
+      // Verify that the trimmed value was used in execution
+      expect(mockActionExecutor.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          injectionType: 'header'
+        })
+      );
+    });
   });
 
   describe('audit coverage', () => {
@@ -562,7 +684,7 @@ describe('UseSecretTool', () => {
         action: 'unknown',
         domain: 'unknown',
         timestamp: expect.any(String),
-        outcome: 'denied' as const,
+        outcome: TEXT.AUDIT_OUTCOME_DENIED,
         reason: TEXT.ERROR_INVALID_REQUEST
       });
     });
@@ -601,7 +723,7 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'api.example.com',
         timestamp: expect.any(String),
-        outcome: 'error' as const,
+        outcome: TEXT.AUDIT_OUTCOME_ERROR,
         reason: 'Policy evaluation failed'
       });
     });
@@ -632,7 +754,7 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'unknown',
         timestamp: expect.any(String),
-        outcome: 'denied' as const,
+        outcome: TEXT.AUDIT_OUTCOME_DENIED,
         reason: TEXT.ERROR_INVALID_REQUEST
       });
     });
@@ -675,7 +797,7 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'api.example.com',
         timestamp: expect.any(String),
-        outcome: 'success' as const,
+        outcome: TEXT.AUDIT_OUTCOME_SUCCESS,
         reason: TEXT.SUCCESS_REQUEST_COMPLETED
       });
     });
@@ -716,7 +838,7 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'api.example.com',
         timestamp: expect.any(String),
-        outcome: 'error' as const,
+        outcome: TEXT.AUDIT_OUTCOME_ERROR,
         reason: 'Network timeout'
       });
     });
@@ -755,7 +877,7 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'api.example.com',
         timestamp: expect.any(String),
-        outcome: 'error' as const,
+        outcome: TEXT.AUDIT_OUTCOME_ERROR,
         reason: TEXT.ERROR_MISSING_ENV
       });
     });
@@ -808,8 +930,53 @@ describe('UseSecretTool', () => {
         action: 'http_get',
         domain: 'api.example.com',
         timestamp: expect.any(String),
-        outcome: 'error' as const,
+        outcome: TEXT.AUDIT_OUTCOME_ERROR,
         reason: TEXT.ERROR_EXECUTION_FAILED
+      });
+    });
+
+    it('should not write duplicate audit when executor throws error', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test API key'
+      });
+
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+
+      // Make executor throw an error
+      const executorError = new Error('Network request failed');
+      vi.mocked(mockActionExecutor.execute).mockRejectedValue(executorError);
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network request failed');
+      expect(result.code).toBe('execution_failed');
+
+      // Should only write one audit entry (from executeSecretAction, not from handleExecutionError)
+      expect(mockAuditService.write).toHaveBeenCalledTimes(1);
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'TEST_API_KEY',
+        action: 'http_get',
+        domain: 'api.example.com',
+        timestamp: expect.any(String),
+        outcome: TEXT.AUDIT_OUTCOME_ERROR,
+        reason: 'Network request failed'
       });
     });
   });

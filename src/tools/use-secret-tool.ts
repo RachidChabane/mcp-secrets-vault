@@ -15,7 +15,7 @@ import { z } from 'zod';
 const UseSecretSchema = z.object({
   secretId: z.string().min(1).transform(s => s.trim()),
   action: z.object({
-    type: z.enum([TEXT.HTTP_METHOD_GET, TEXT.HTTP_METHOD_POST]),
+    type: z.string().transform(s => s.trim()).pipe(z.enum([TEXT.HTTP_METHOD_GET, TEXT.HTTP_METHOD_POST])),
     url: z.string().transform(s => s.trim()).refine(
       (val) => {
         try {
@@ -46,7 +46,7 @@ const UseSecretSchema = z.object({
       return trimmed;
     }),
     body: z.string().optional().transform(s => s?.trim()),
-    injectionType: z.enum([TEXT.INJECTION_TYPE_BEARER, TEXT.INJECTION_TYPE_HEADER])
+    injectionType: z.string().optional().transform(s => s?.trim()).pipe(z.enum([TEXT.INJECTION_TYPE_BEARER, TEXT.INJECTION_TYPE_HEADER]))
       .default(TEXT.INJECTION_TYPE_BEARER)
   })
 });
@@ -81,6 +81,13 @@ interface ValidatedRequest {
   domain: string;
 }
 
+class AuditedError extends Error {
+  constructor(message: string, public readonly originalError: unknown) {
+    super(message);
+    this.name = 'AuditedError';
+  }
+}
+
 export class UseSecretTool {
   private readonly tool: Tool;
   private readonly auditService: AuditService;
@@ -103,7 +110,7 @@ export class UseSecretTool {
         properties: {
           secretId: {
             type: TEXT.SCHEMA_TYPE_STRING,
-            description: 'The ID of the secret to use'
+            description: TEXT.INPUT_DESC_USE_SECRET_ID
           },
           action: {
             type: TEXT.SCHEMA_TYPE_OBJECT,
@@ -111,25 +118,25 @@ export class UseSecretTool {
               type: {
                 type: TEXT.SCHEMA_TYPE_STRING,
                 enum: [TEXT.HTTP_METHOD_GET, TEXT.HTTP_METHOD_POST],
-                description: 'The type of action to perform'
+                description: TEXT.INPUT_DESC_ACTION_TYPE
               },
               url: {
                 type: TEXT.SCHEMA_TYPE_STRING,
-                description: 'The URL to make the request to'
+                description: TEXT.INPUT_DESC_ACTION_URL
               },
               headers: {
                 type: TEXT.SCHEMA_TYPE_OBJECT,
-                description: 'Optional headers for the request',
+                description: TEXT.INPUT_DESC_ACTION_HEADERS,
                 additionalProperties: { type: TEXT.SCHEMA_TYPE_STRING }
               },
               body: {
                 type: TEXT.SCHEMA_TYPE_STRING,
-                description: 'Optional body for POST requests'
+                description: TEXT.INPUT_DESC_ACTION_BODY
               },
               injectionType: {
                 type: TEXT.SCHEMA_TYPE_STRING,
                 enum: [TEXT.INJECTION_TYPE_BEARER, TEXT.INJECTION_TYPE_HEADER],
-                description: 'How to inject the secret (bearer or header)'
+                description: TEXT.INPUT_DESC_INJECTION_TYPE
               }
             },
             required: ['type', 'url']
@@ -149,7 +156,7 @@ export class UseSecretTool {
    */
   private async auditRequest(
     context: Partial<AuditContext>,
-    outcome: 'success' | 'denied' | 'error',
+    outcome: typeof TEXT.AUDIT_OUTCOME_SUCCESS | typeof TEXT.AUDIT_OUTCOME_DENIED | typeof TEXT.AUDIT_OUTCOME_ERROR,
     reason: string
   ): Promise<void> {
     await this.auditService.write({
@@ -183,7 +190,7 @@ export class UseSecretTool {
           action: rawArgs?.action?.type,
           domain: undefined
         },
-        'denied',
+        TEXT.AUDIT_OUTCOME_DENIED,
         TEXT.ERROR_INVALID_REQUEST
       );
       throw validationError;
@@ -200,7 +207,7 @@ export class UseSecretTool {
     if (!rateCheck.allowed) {
       await this.auditRequest(
         { secretId, action, domain },
-        'denied',
+        TEXT.AUDIT_OUTCOME_DENIED,
         TEXT.ERROR_RATE_LIMITED
       );
       
@@ -224,7 +231,7 @@ export class UseSecretTool {
     if (!secretInfo || !secretInfo.available) {
       await this.auditRequest(
         { secretId, action, domain },
-        'denied',
+        TEXT.AUDIT_OUTCOME_DENIED,
         TEXT.ERROR_UNKNOWN_SECRET
       );
       
@@ -245,7 +252,7 @@ export class UseSecretTool {
       if (!accessDecision.allowed) {
         await this.auditRequest(
           { secretId, action, domain },
-          'denied',
+          TEXT.AUDIT_OUTCOME_DENIED,
           accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION
         );
         
@@ -262,7 +269,7 @@ export class UseSecretTool {
       // For unexpected policy evaluation errors
       await this.auditRequest(
         { secretId, action, domain },
-        'error',
+        TEXT.AUDIT_OUTCOME_ERROR,
         policyError instanceof Error ? policyError.message : TEXT.ERROR_EXECUTION_FAILED
       );
       throw new ToolError(TEXT.ERROR_EXECUTION_FAILED, CONFIG.ERROR_CODE_EXECUTION_FAILED);
@@ -278,7 +285,7 @@ export class UseSecretTool {
     if (!secretValue) {
       await this.auditRequest(
         { secretId, action, domain },
-        'error',
+        TEXT.AUDIT_OUTCOME_ERROR,
         TEXT.ERROR_MISSING_ENV
       );
       
@@ -306,15 +313,18 @@ export class UseSecretTool {
         injectionType: action.injectionType || TEXT.INJECTION_TYPE_BEARER
       });
       
-      await this.auditRequest(context, 'success', TEXT.SUCCESS_REQUEST_COMPLETED);
+      await this.auditRequest(context, TEXT.AUDIT_OUTCOME_SUCCESS, TEXT.SUCCESS_REQUEST_COMPLETED);
       return result;
     } catch (executorError) {
       await this.auditRequest(
         context,
-        'error',
+        TEXT.AUDIT_OUTCOME_ERROR,
         executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR
       );
-      throw executorError;
+      throw new AuditedError(
+        executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR,
+        executorError
+      );
     }
   }
 
@@ -335,22 +345,44 @@ export class UseSecretTool {
       return { success: false, error: error.message, code: error.code };
     }
     
+    if (error instanceof AuditedError) {
+      // Audit has already been written in executeSecretAction, just handle the error response
+      const errorMessage = error.message;
+      writeError(errorMessage, { 
+        level: 'ERROR', 
+        code: CONFIG.ERROR_CODE_EXECUTION_FAILED,
+        secretId: context.secretId,
+        domain: context.domain
+      });
+      return { success: false, error: errorMessage, code: CONFIG.ERROR_CODE_EXECUTION_FAILED };
+    }
+    
     if (error instanceof z.ZodError) {
       const hasInvalidUrl = error.errors.some(e => e.message === TEXT.ERROR_INVALID_URL);
       const hasEmptyHeader = error.errors.some(e => e.message === TEXT.ERROR_EMPTY_HEADER_NAME);
+      const hasInvalidActionType = error.errors.some(e => 
+        e.path.includes('action') && e.path.includes('type')
+      );
+      const hasInvalidInjectionType = error.errors.some(e => 
+        e.path.includes('action') && e.path.includes('injectionType')
+      );
       
       const errorMessage = hasInvalidUrl ? TEXT.ERROR_INVALID_URL
         : hasEmptyHeader ? TEXT.ERROR_EMPTY_HEADER_NAME
+        : hasInvalidActionType ? TEXT.ERROR_INVALID_METHOD
+        : hasInvalidInjectionType ? TEXT.ERROR_INVALID_INJECTION_TYPE
         : TEXT.ERROR_INVALID_REQUEST;
       const errorCode = hasInvalidUrl ? CONFIG.ERROR_CODE_INVALID_URL
         : hasEmptyHeader ? CONFIG.ERROR_CODE_INVALID_HEADERS
+        : hasInvalidActionType ? CONFIG.ERROR_CODE_INVALID_METHOD
+        : hasInvalidInjectionType ? CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE
         : CONFIG.ERROR_CODE_INVALID_REQUEST;
       
       writeError(errorMessage, { level: 'ERROR', code: errorCode, details: error.errors });
       return { success: false, error: errorMessage, code: errorCode };
     }
     
-    await this.auditRequest(context, 'error', TEXT.ERROR_EXECUTION_FAILED);
+    await this.auditRequest(context, TEXT.AUDIT_OUTCOME_ERROR, TEXT.ERROR_EXECUTION_FAILED);
     
     const errorMessage = error instanceof Error ? error.message : TEXT.ERROR_EXECUTION_FAILED;
     writeError(errorMessage, { level: 'ERROR', code: CONFIG.ERROR_CODE_EXECUTION_FAILED });
