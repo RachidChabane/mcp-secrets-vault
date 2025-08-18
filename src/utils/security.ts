@@ -64,8 +64,10 @@ export function sanitizeForOutput(
  * Sanitize error messages for safe output
  */
 export function sanitizeError(error: unknown): string {
-  if (error instanceof Error) {
-    return redactSensitiveValue(error.message);
+  // Check if it's an Error-like object by looking for message property
+  const err = error as any;
+  if (err?.message && typeof err.message === 'string') {
+    return redactSensitiveValue(err.message);
   }
   if (typeof error === 'string') {
     return redactSensitiveValue(error);
@@ -90,8 +92,10 @@ export function sanitizeHeaders(
     }
   };
   
-  if (headers instanceof Headers) {
-    headers.forEach(processHeader);
+  // Check if it's a Headers object by looking for the forEach method
+  const h = headers as any;
+  if (h?.forEach && typeof h.forEach === 'function') {
+    h.forEach(processHeader);
   } else {
     Object.entries(headers).forEach(([key, value]) => {
       processHeader(value, key);

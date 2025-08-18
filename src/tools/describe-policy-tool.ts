@@ -2,8 +2,9 @@ import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { PolicyProvider, PolicyConfig } from '../interfaces/policy.interface.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
-import { z, ZodError } from 'zod';
-import { VaultError, ValidationError } from '../utils/errors.js';
+import { z } from 'zod';
+import { ToolError } from '../utils/errors.js';
+import { mapZodErrorToToolError } from '../utils/zod-mapper.js';
 
 const DescribePolicySchema = z.object({
   [TEXT.FIELD_SECRET_ID]: z.string()
@@ -52,21 +53,11 @@ export class DescribePolicyTool {
       const parsed = DescribePolicySchema.parse(args);
       return parsed[TEXT.FIELD_SECRET_ID];
     } catch (error) {
-      if (error instanceof ZodError) {
-        const firstIssue = error.issues[0];
-        if (firstIssue && firstIssue.path.length > 0) {
-          const field = String(firstIssue.path[0]);
-          throw new ValidationError(
-            CONFIG.ERROR_CODE_INVALID_REQUEST,
-            TEXT.ERROR_INVALID_REQUEST,
-            field
-          );
-        }
-        throw new ValidationError(
-          CONFIG.ERROR_CODE_INVALID_REQUEST,
-          TEXT.ERROR_INVALID_REQUEST,
-          TEXT.FIELD_SECRET_ID
-        );
+      // Check if it's a ZodError by looking for the issues property
+      const err = error as any;
+      if (err?.issues && Array.isArray(err.issues)) {
+        // Map ZodError to ToolError with proper code
+        throw mapZodErrorToToolError(err as z.ZodError);
       }
       throw error;
     }
@@ -76,10 +67,10 @@ export class DescribePolicyTool {
     const policy = this.policyProvider.getPolicy(secretId);
     
     if (!policy) {
-      throw new VaultError(
-        CONFIG.ERROR_CODE_NO_POLICY,
+      // Normalize to ToolError at boundary
+      throw new ToolError(
         TEXT.ERROR_POLICY_NOT_FOUND,
-        { [TEXT.FIELD_SECRET_ID]: secretId }
+        CONFIG.ERROR_CODE_NO_POLICY
       );
     }
     

@@ -11,6 +11,8 @@ import { CONFIG } from '../constants/config-constants.js';
 import { ToolError } from '../utils/errors.js';
 import { writeError } from '../utils/logging.js';
 import { z } from 'zod';
+import { mapZodErrorToToolError } from '../utils/zod-mapper.js';
+import { respondByCode, HTTP_METHOD_MAP, INJECTION_HANDLERS, RESPONSE_BY_CODE } from '../utils/tables.js';
 
 const UseSecretSchema = z.object({
   secretId: z.string().min(1).transform(s => s.trim()),
@@ -79,13 +81,6 @@ interface ValidatedRequest {
   secretId: string;
   action: UseSecretArgs['action'];
   domain: string;
-}
-
-class AuditedError extends Error {
-  constructor(message: string, public readonly originalError: unknown) {
-    super(message);
-    this.name = 'AuditedError';
-  }
 }
 
 export class UseSecretTool {
@@ -280,11 +275,11 @@ export class UseSecretTool {
   /**
    * Handles unexpected policy evaluation errors
    */
-  private async handlePolicyError(policyError: unknown, secretId: string, action: string, domain: string): Promise<void> {
+  private async handlePolicyError(_policyError: unknown, secretId: string, action: string, domain: string): Promise<void> {
     await this.auditRequest(
       { secretId, action, domain },
       TEXT.AUDIT_OUTCOME_ERROR,
-      policyError instanceof Error ? policyError.message : TEXT.ERROR_EXECUTION_FAILED
+      TEXT.ERROR_EXECUTION_FAILED  // Always use TEXT constant, never raw error.message
     );
     throw new ToolError(TEXT.ERROR_EXECUTION_FAILED, CONFIG.ERROR_CODE_EXECUTION_FAILED);
   }
@@ -296,8 +291,10 @@ export class UseSecretTool {
     try {
       await this.checkPolicyAccess(secretId, action, domain);
     } catch (policyError) {
-      // If it's already a ToolError from the denied case above, rethrow it
-      if (policyError instanceof ToolError) {
+      // All errors are normalized to ToolError at boundaries
+      // Re-throw if already a ToolError (has a code property that's in our table)
+      const error = policyError as any;
+      if (error?.code && RESPONSE_BY_CODE[error.code]) {
         throw policyError;
       }
       
@@ -332,13 +329,21 @@ export class UseSecretTool {
     action: UseSecretArgs['action'],
     secretValue: string
   ): Promise<unknown> {
+    // Use dispatch table for HTTP method mapping
+    const method = HTTP_METHOD_MAP[action.type];
+    const injectionType = action.injectionType || TEXT.INJECTION_TYPE_BEARER;
+    
+    // Use injection handler from dispatch table
+    const injectionHandler = INJECTION_HANDLERS[injectionType];
+    const headers = injectionHandler(action.headers || {}, secretValue);
+    
     return await this.actionExecutor.execute({
-      method: action.type === TEXT.HTTP_METHOD_GET ? TEXT.HTTP_VERB_GET : TEXT.HTTP_VERB_POST,
+      method,
       url: action.url,
-      headers: action.headers,
+      headers,
       body: action.body,
       secretValue,
-      injectionType: action.injectionType || TEXT.INJECTION_TYPE_BEARER
+      injectionType
     });
   }
 
@@ -346,18 +351,15 @@ export class UseSecretTool {
    * Handles action execution errors with audit logging
    */
   private async handleActionError(
-    executorError: unknown,
+    _executorError: unknown,
     context: AuditContext
   ): Promise<never> {
     await this.auditRequest(
       context,
       TEXT.AUDIT_OUTCOME_ERROR,
-      executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR
+      TEXT.ERROR_EXECUTION_FAILED  // Always use TEXT constant, never raw error.message
     );
-    throw new AuditedError(
-      executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR,
-      executorError
-    );
+    throw new ToolError(TEXT.ERROR_EXECUTION_FAILED, CONFIG.ERROR_CODE_EXECUTION_FAILED);
   }
 
   /**
@@ -379,6 +381,7 @@ export class UseSecretTool {
 
   /**
    * Handles ToolError instances
+   * Note: Audit already written at failure site, so we don't audit again here
    */
   private handleToolError(error: ToolError, context: Partial<AuditContext>): UseSecretResponse {
     writeError(error.message, {
@@ -387,79 +390,48 @@ export class UseSecretTool {
       secretId: context.secretId,
       domain: context.domain
     });
-    return { success: false, error: error.message, code: error.code };
+    // Use dispatch table for response
+    return respondByCode(error.code);
   }
 
   /**
-   * Handles AuditedError instances (errors that already have audit entries)
-   */
-  private handleAuditedError(error: AuditedError, context: Partial<AuditContext>): UseSecretResponse {
-    const errorMessage = error.message;
-    writeError(errorMessage, { 
-      level: CONFIG.LOG_LEVEL_ERROR, 
-      code: CONFIG.ERROR_CODE_EXECUTION_FAILED,
-      secretId: context.secretId,
-      domain: context.domain
-    });
-    return { success: false, error: errorMessage, code: CONFIG.ERROR_CODE_EXECUTION_FAILED };
-  }
-
-  /**
-   * Handles ZodError instances with specific error type detection
+   * Handles ZodError instances by mapping to ToolError
    */
   private handleZodError(error: z.ZodError): UseSecretResponse {
-    const hasInvalidUrl = error.errors.some(e => e.message === TEXT.ERROR_INVALID_URL);
-    const hasEmptyHeader = error.errors.some(e => e.message === TEXT.ERROR_EMPTY_HEADER_NAME);
-    const hasInvalidActionType = error.errors.some(e => 
-      e.path.includes(TEXT.FIELD_ACTION) && e.path.includes(TEXT.FIELD_TYPE)
-    );
-    const hasInvalidInjectionType = error.errors.some(e => 
-      e.path.includes(TEXT.FIELD_ACTION) && e.path.includes(TEXT.FIELD_INJECTION_TYPE_LOWER)
-    );
-    
-    const errorMessage = hasInvalidUrl ? TEXT.ERROR_INVALID_URL
-      : hasEmptyHeader ? TEXT.ERROR_EMPTY_HEADER_NAME
-      : hasInvalidActionType ? TEXT.ERROR_INVALID_METHOD
-      : hasInvalidInjectionType ? TEXT.ERROR_INVALID_INJECTION_TYPE
-      : TEXT.ERROR_INVALID_REQUEST;
-    const errorCode = hasInvalidUrl ? CONFIG.ERROR_CODE_INVALID_URL
-      : hasEmptyHeader ? CONFIG.ERROR_CODE_INVALID_HEADERS
-      : hasInvalidActionType ? CONFIG.ERROR_CODE_INVALID_METHOD
-      : hasInvalidInjectionType ? CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE
-      : CONFIG.ERROR_CODE_INVALID_REQUEST;
-    
-    writeError(errorMessage, { level: CONFIG.LOG_LEVEL_ERROR, code: errorCode, details: error.errors });
-    return { success: false, error: errorMessage, code: errorCode };
+    const toolError = mapZodErrorToToolError(error);
+    writeError(toolError.message, { level: CONFIG.LOG_LEVEL_ERROR, code: toolError.code, details: error.errors });
+    // Use dispatch table for response
+    return respondByCode(toolError.code);
   }
 
   /**
    * Handles generic errors with audit logging
    */
-  private async handleGenericError(error: unknown, context: Partial<AuditContext>): Promise<UseSecretResponse> {
+  private async handleGenericError(_error: unknown, context: Partial<AuditContext>): Promise<UseSecretResponse> {
     await this.auditRequest(context, TEXT.AUDIT_OUTCOME_ERROR, TEXT.ERROR_EXECUTION_FAILED);
     
-    const errorMessage = error instanceof Error ? error.message : TEXT.ERROR_EXECUTION_FAILED;
-    writeError(errorMessage, { level: CONFIG.LOG_LEVEL_ERROR, code: CONFIG.ERROR_CODE_EXECUTION_FAILED });
-    return { success: false, error: errorMessage, code: CONFIG.ERROR_CODE_EXECUTION_FAILED };
+    // Never expose raw error.message, always use TEXT constant
+    writeError(TEXT.ERROR_EXECUTION_FAILED, { level: CONFIG.LOG_LEVEL_ERROR, code: CONFIG.ERROR_CODE_EXECUTION_FAILED });
+    return respondByCode(CONFIG.ERROR_CODE_EXECUTION_FAILED);
   }
 
   /**
    * Handles execution errors and returns appropriate error responses
+   * Uses table-driven dispatch instead of instanceof checks
    */
   private async handleExecutionError(
     error: unknown,
     context: Partial<AuditContext>
   ): Promise<UseSecretResponse> {
-    if (error instanceof ToolError) {
-      return this.handleToolError(error, context);
+    // Check if it's a ToolError by looking for the code property
+    const err = error as any;
+    if (err?.code && err?.message) {
+      return this.handleToolError(err as ToolError, context);
     }
     
-    if (error instanceof AuditedError) {
-      return this.handleAuditedError(error, context);
-    }
-    
-    if (error instanceof z.ZodError) {
-      return this.handleZodError(error);
+    // Check if it's a ZodError by looking for the issues property
+    if (err?.issues && Array.isArray(err.issues)) {
+      return this.handleZodError(err as z.ZodError);
     }
     
     return await this.handleGenericError(error, context);
