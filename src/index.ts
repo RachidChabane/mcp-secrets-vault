@@ -7,8 +7,10 @@ import { CONFIG } from './constants/config-constants.js';
 import { TEXT } from './constants/text-constants.js';
 import { EnvSecretProvider } from './services/env-secret-provider.js';
 import { PolicyProviderService } from './services/policy-provider.service.js';
+import { HttpActionExecutor } from './services/http-action-executor.service.js';
 import { DiscoverTool } from './tools/discover-tool.js';
 import { DescribePolicyTool } from './tools/describe-policy-tool.js';
+import { UseSecretTool } from './tools/use-secret-tool.js';
 import { SecretMapping } from './interfaces/secret-mapping.interface.js';
 import { writeError } from './utils/logging.js';
 import { ToolError } from './utils/errors.js';
@@ -79,13 +81,16 @@ async function executeTool(
   name: string, 
   args: unknown,
   discoverTool: DiscoverTool,
-  describePolicyTool: DescribePolicyTool
+  describePolicyTool: DescribePolicyTool,
+  useSecretTool: UseSecretTool
 ): Promise<unknown> {
   switch (name) {
     case TEXT.TOOL_DISCOVER:
       return await discoverTool.execute(args);
     case TEXT.TOOL_DESCRIBE:
       return await describePolicyTool.execute(args);
+    case TEXT.TOOL_USE:
+      return await useSecretTool.execute(args);
     default:
       throw new ToolError(
         TEXT.ERROR_UNKNOWN_TOOL,
@@ -111,6 +116,7 @@ async function main(): Promise<void> {
   const mappings = await loadMappings();
   const secretProvider = new EnvSecretProvider(mappings);
   const policyProvider = new PolicyProviderService();
+  const actionExecutor = new HttpActionExecutor();
   
   // Load policies
   await policyProvider.loadPolicies();
@@ -118,12 +124,14 @@ async function main(): Promise<void> {
   // Initialize tools
   const discoverTool = new DiscoverTool(secretProvider);
   const describePolicyTool = new DescribePolicyTool(policyProvider);
+  const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor);
   
   // Register tool listing handler
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       discoverTool.getTool(),
       describePolicyTool.getTool(),
+      useSecretTool.getTool(),
     ],
   }));
 
@@ -132,7 +140,7 @@ async function main(): Promise<void> {
     const { name, arguments: args } = request.params;
     
     try {
-      const result = await executeTool(name, args, discoverTool, describePolicyTool);
+      const result = await executeTool(name, args, discoverTool, describePolicyTool, useSecretTool);
       return createSuccessResponse(result);
     } catch (error) {
       return createErrorResponse(error, name);
