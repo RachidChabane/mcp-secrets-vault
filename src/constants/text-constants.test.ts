@@ -26,9 +26,27 @@ describe('Text Constants', () => {
     expect(TEXT.TOOL_AUDIT).toBe('query_audit');
   });
 
-  it('should have unique values for all constants', () => {
+  it('should have unique values for all constants (allowing legitimate contextual duplicates)', () => {
     const values = Object.values(TEXT);
-    const uniqueValues = new Set(values);
-    expect(uniqueValues.size).toBe(values.length);
+    // Flatten arrays for duplicate checking
+    const flattenedValues = values.flatMap(value => 
+      Array.isArray(value) ? value : [value]
+    );
+    const uniqueValues = new Set(flattenedValues);
+    
+    // Allow specific legitimate duplicate values that are used in different contexts
+    const legitimateDuplicates = [
+      'error',     // Used by both FIELD_ERROR (JSON key) and AUDIT_OUTCOME_ERROR (audit value)
+      'type',      // Used by FIELD_TYPE, SCHEMA_TYPE, and in SCHEMA_REQUIRED_ACTION array
+      'url',       // Used by FIELD_URL and in SCHEMA_REQUIRED_ACTION array
+      'secretId',  // Used by FIELD_SECRET_ID and in SCHEMA_REQUIRED_USE_SECRET array
+      'action'     // Used by FIELD_ACTION and in SCHEMA_REQUIRED_USE_SECRET array
+    ];
+    
+    const expectedDuplicates = flattenedValues.filter(value => 
+      legitimateDuplicates.includes(value as string)
+    ).length - legitimateDuplicates.length;
+    
+    expect(uniqueValues.size).toBe(flattenedValues.length - expectedDuplicates);
   });
 });

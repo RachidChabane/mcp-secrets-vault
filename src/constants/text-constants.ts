@@ -36,6 +36,11 @@ export const TEXT = {
   ERROR_EMPTY_HEADER_NAME: 'Header name cannot be empty',
   ERROR_UNKNOWN_TOOL: 'Unknown tool requested',
   ERROR_TOOL_EXECUTION_FAILED: 'Tool execution failed',
+  ERROR_INVALID_METHOD: 'Invalid HTTP method',
+  ERROR_INVALID_INJECTION_TYPE: 'Invalid injection type',
+  ERROR_INVALID_URL: 'Invalid URL format',
+  ERROR_INVALID_HEADERS: 'Invalid headers format',
+  ERROR_EXECUTION_FAILED: 'Execution failed',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',
@@ -45,6 +50,9 @@ export const TEXT = {
   // Field names
   FIELD_SECRET_ID: 'secretId',
   FIELD_ACTION: 'action',
+  FIELD_TYPE: 'type',
+  FIELD_URL: 'url',
+  FIELD_INJECTION_TYPE_LOWER: 'injectionType',
   FIELD_DOMAIN: 'domain',
   FIELD_TIMESTAMP: 'timestamp',
   FIELD_OUTCOME: 'outcome',
@@ -82,11 +90,17 @@ export const TEXT = {
   // Audit outcomes
   AUDIT_OUTCOME_SUCCESS: 'success',
   AUDIT_OUTCOME_DENIED: 'denied',
-  AUDIT_OUTCOME_ERROR: 'failure',
+  AUDIT_OUTCOME_ERROR: 'error',
   
   // HTTP methods
   HTTP_METHOD_GET: 'http_get',
   HTTP_METHOD_POST: 'http_post',
+  HTTP_VERB_GET: 'GET',
+  HTTP_VERB_POST: 'POST',
+  
+  // Injection types
+  INJECTION_TYPE_BEARER: 'bearer',
+  INJECTION_TYPE_HEADER: 'header',
   
   // Response messages
   RESPONSE_NO_SECRETS: 'No secrets configured',
@@ -113,6 +127,13 @@ export const TEXT = {
   
   // Input field descriptions
   INPUT_DESC_SECRET_ID: 'The ID of the secret to describe policy for',
+  INPUT_DESC_USE_SECRET_ID: 'The ID of the secret to use',
+  INPUT_DESC_ACTION: 'The action to perform with the secret',
+  INPUT_DESC_ACTION_TYPE: 'The type of action to perform',
+  INPUT_DESC_ACTION_URL: 'The URL to make the request to',
+  INPUT_DESC_ACTION_HEADERS: 'Optional headers for the request',
+  INPUT_DESC_ACTION_BODY: 'Optional body for POST requests',
+  INPUT_DESC_INJECTION_TYPE: 'How to inject the secret (bearer or header)',
   
   // Schema types
   SCHEMA_TYPE_OBJECT: 'object',
@@ -121,7 +142,15 @@ export const TEXT = {
   // Schema field names (JSON Schema standard keywords)
   SCHEMA_PROPERTIES: 'properties',
   SCHEMA_REQUIRED: 'required',
-  SCHEMA_TYPE: 'type'
+  SCHEMA_TYPE: 'type',
+  
+  // Schema required arrays
+  SCHEMA_REQUIRED_ACTION: ['type', 'url'] as string[],
+  SCHEMA_REQUIRED_USE_SECRET: ['secretId', 'action'] as string[],
+  
+  // Field values
+  FIELD_VALUE_UNKNOWN: 'unknown',
+  FIELD_VALUE_INVALID: 'invalid'
 } as const;
 
 export type TextKey = keyof typeof TEXT;
