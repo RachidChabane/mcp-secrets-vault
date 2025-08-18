@@ -132,7 +132,11 @@ export const TEXT = {
   // Schema field names (JSON Schema standard keywords)
   SCHEMA_PROPERTIES: 'properties',
   SCHEMA_REQUIRED: 'required',
-  SCHEMA_TYPE: 'type'
+  SCHEMA_TYPE: 'type',
+  
+  // Field values
+  FIELD_VALUE_UNKNOWN: 'unknown',
+  FIELD_VALUE_INVALID: 'invalid'
 } as const;
 
 export type TextKey = keyof typeof TEXT;

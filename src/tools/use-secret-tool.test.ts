@@ -8,6 +8,7 @@ import type { IActionExecutor } from '../interfaces/action-executor.interface.js
 import { JsonlAuditService } from '../services/audit-service.js';
 import type { AuditService } from '../interfaces/audit.interface.js';
 import { TEXT } from '../constants/text-constants.js';
+import { CONFIG } from '../constants/config-constants.js';
 
 vi.mock('../services/audit-service.js');
 
@@ -34,7 +35,7 @@ describe('UseSecretTool', () => {
     };
 
     mockRateLimiter = {
-      checkLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 99, resetAt: Date.now() + 3600000 }),
+      checkLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 99, resetAt: Date.now() + CONFIG.DEFAULT_RATE_LIMIT_WINDOW_SECONDS * CONFIG.MILLISECONDS_PER_SECOND }),
       reset: vi.fn(),
       resetAll: vi.fn()
     } as any;
@@ -276,8 +277,8 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
-      expect(result.code).toBe('invalid_request');
+      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
+      expect(result.code).toBe('invalid_url');
     });
 
     it('should handle POST request with headers and body', async () => {
@@ -394,7 +395,7 @@ describe('UseSecretTool', () => {
       vi.mocked(mockRateLimiter.checkLimit).mockReturnValue({
         allowed: false,
         remaining: 0,
-        resetAt: Date.now() + 3600000
+        resetAt: Date.now() + CONFIG.DEFAULT_RATE_LIMIT_WINDOW_SECONDS * CONFIG.MILLISECONDS_PER_SECOND
       });
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
@@ -498,8 +499,8 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
-      expect(result.code).toBe('invalid_request');
+      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
+      expect(result.code).toBe('invalid_url');
     });
 
     it('should support injection type parameter', async () => {
@@ -777,6 +778,39 @@ describe('UseSecretTool', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Unexpected error');
       expect(result.code).toBe('execution_failed');
+    });
+
+    it('should audit unexpected errors in catch-all path', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      // Mock to throw non-ToolError, non-ZodError
+      vi.mocked(mockSecretProvider.getSecretInfo).mockImplementation(() => {
+        throw new Error('Unexpected database error');
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unexpected database error');
+      expect(result.code).toBe('execution_failed');
+
+      // Verify audit entry was created with error outcome
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'TEST_API_KEY',
+        action: 'http_get',
+        domain: 'api.example.com',
+        timestamp: expect.any(String),
+        outcome: 'error' as const,
+        reason: TEXT.ERROR_EXECUTION_FAILED
+      });
     });
   });
 });

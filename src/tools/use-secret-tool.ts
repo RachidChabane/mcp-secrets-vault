@@ -149,9 +149,9 @@ export class UseSecretTool {
         // Audit invalid request even when missing fields
         const rawArgs = args as any;
         await this.auditService.write({
-          secretId: rawArgs?.secretId || 'unknown',
-          action: rawArgs?.action?.type || 'unknown',
-          domain: 'unknown',
+          secretId: rawArgs?.secretId || TEXT.FIELD_VALUE_UNKNOWN,
+          action: rawArgs?.action?.type || TEXT.FIELD_VALUE_UNKNOWN,
+          domain: TEXT.FIELD_VALUE_UNKNOWN,
           timestamp: new Date().toISOString(),
           outcome: 'denied' as const,
           reason: TEXT.ERROR_INVALID_REQUEST
@@ -166,9 +166,9 @@ export class UseSecretTool {
         domain = url.hostname;
       } catch {
         await this.auditService.write({
-          secretId: secretId || 'unknown',
-          action: action?.type || 'unknown',
-          domain: 'invalid',
+          secretId: secretId || TEXT.FIELD_VALUE_UNKNOWN,
+          action: action?.type || TEXT.FIELD_VALUE_UNKNOWN,
+          domain: TEXT.FIELD_VALUE_INVALID,
           timestamp: new Date().toISOString(),
           outcome: 'denied' as const,
           reason: TEXT.ERROR_INVALID_URL
@@ -348,13 +348,23 @@ export class UseSecretTool {
         const hasEmptyHeader = error.errors.some(e => 
           e.message === TEXT.ERROR_EMPTY_HEADER_NAME
         );
+        const hasInvalidUrl = error.errors.some(e => 
+          e.message === TEXT.ERROR_INVALID_URL
+        );
         
-        const errorMessage = hasEmptyHeader 
-          ? TEXT.ERROR_EMPTY_HEADER_NAME 
-          : TEXT.ERROR_INVALID_REQUEST;
-        const errorCode = hasEmptyHeader 
-          ? CONFIG.ERROR_CODE_INVALID_HEADERS 
-          : CONFIG.ERROR_CODE_INVALID_REQUEST;
+        let errorMessage: string;
+        let errorCode: string;
+        
+        if (hasInvalidUrl) {
+          errorMessage = TEXT.ERROR_INVALID_URL;
+          errorCode = CONFIG.ERROR_CODE_INVALID_URL;
+        } else if (hasEmptyHeader) {
+          errorMessage = TEXT.ERROR_EMPTY_HEADER_NAME;
+          errorCode = CONFIG.ERROR_CODE_INVALID_HEADERS;
+        } else {
+          errorMessage = TEXT.ERROR_INVALID_REQUEST;
+          errorCode = CONFIG.ERROR_CODE_INVALID_REQUEST;
+        }
         
         writeError(errorMessage, {
           level: 'ERROR',
@@ -368,6 +378,16 @@ export class UseSecretTool {
           code: errorCode
         };
       }
+      
+      // Audit unexpected error in catch-all path
+      await this.auditService.write({
+        secretId: secretId || TEXT.FIELD_VALUE_UNKNOWN,
+        action: action?.type || TEXT.FIELD_VALUE_UNKNOWN,
+        domain: domain || TEXT.FIELD_VALUE_UNKNOWN,
+        timestamp: new Date().toISOString(),
+        outcome: 'error' as const,
+        reason: TEXT.ERROR_EXECUTION_FAILED
+      });
       
       const errorMessage = error instanceof Error 
         ? error.message 
