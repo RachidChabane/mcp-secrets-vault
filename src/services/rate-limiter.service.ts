@@ -27,7 +27,7 @@ export class RateLimiterService {
     windowSeconds: number = this.defaultWindowSeconds
   ): { allowed: boolean; remaining: number; resetAt: number } {
     const now = Date.now();
-    const windowMs = windowSeconds * 1000;
+    const windowMs = windowSeconds * CONFIG.MILLISECONDS_PER_SECOND;
     const windowStart = now - windowMs;
 
     let window = this.windows.get(key);
@@ -57,7 +57,7 @@ export class RateLimiterService {
 
   private cleanup(): void {
     const now = Date.now();
-    const maxAge = this.defaultWindowSeconds * 1000 * 2;
+    const maxAge = this.defaultWindowSeconds * CONFIG.MILLISECONDS_PER_SECOND * CONFIG.RATE_LIMIT_WINDOW_MULTIPLIER;
 
     for (const [key, window] of this.windows.entries()) {
       const hasRecentRequests = window.requests.some(

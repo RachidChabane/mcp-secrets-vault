@@ -40,6 +40,7 @@ export const TEXT = {
   ERROR_INVALID_INJECTION_TYPE: 'Invalid injection type',
   ERROR_INVALID_URL: 'Invalid URL format',
   ERROR_INVALID_HEADERS: 'Invalid headers format',
+  ERROR_EXECUTION_FAILED: 'Execution failed',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',
@@ -91,6 +92,8 @@ export const TEXT = {
   // HTTP methods
   HTTP_METHOD_GET: 'http_get',
   HTTP_METHOD_POST: 'http_post',
+  HTTP_VERB_GET: 'GET',
+  HTTP_VERB_POST: 'POST',
   
   // Injection types
   INJECTION_TYPE_BEARER: 'bearer',

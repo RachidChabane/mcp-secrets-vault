@@ -161,7 +161,7 @@ describe('UseSecretTool', () => {
       });
 
       expect(mockActionExecutor.execute).toHaveBeenCalledWith({
-        method: 'GET',
+        method: TEXT.HTTP_VERB_GET,
         url: 'https://api.example.com/data',
         headers: undefined,
         body: undefined,
@@ -328,7 +328,7 @@ describe('UseSecretTool', () => {
       });
 
       expect(mockActionExecutor.execute).toHaveBeenCalledWith({
-        method: 'POST',
+        method: TEXT.HTTP_VERB_POST,
         url: 'https://api.example.com/submit',
         headers: {
           'Content-Type': 'application/json',
@@ -340,35 +340,44 @@ describe('UseSecretTool', () => {
       });
     });
 
-    it('should log audit entry even when policy evaluation fails', async () => {
+    it('should trim URL before validation', async () => {
       const args = {
         secretId: 'TEST_API_KEY',
         action: {
           type: 'http_get',
-          url: 'https://api.example.com/data'
+          url: '  https://api.example.com/data  '  // URL with spaces
         }
       };
 
       vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
         secretId: 'TEST_API_KEY',
         available: true,
-        description: 'Test API key'
+        description: 'Test'
       });
 
-      const evaluationError = new Error('Policy evaluation failed');
-      mockPolicyProvider.evaluate = vi.fn().mockImplementation(() => {
-        throw evaluationError;
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
       });
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: '{}'
+      });
+
       const result = await tool.execute(args);
 
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
-      expect(result.code).toBeDefined();
-
-      // Since policy evaluation throws, we never get to audit
+      expect(result.success).toBe(true);
+      expect(mockActionExecutor.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://api.example.com/data'  // Trimmed URL
+        })
+      );
     });
   });
 
@@ -535,6 +544,99 @@ describe('UseSecretTool', () => {
   });
 
   describe('audit coverage', () => {
+    it('should audit completely invalid request with fallback values', async () => {
+      const args = {}; // Missing both secretId and action
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.code).toBe('invalid_request');
+
+      // Should have written audit with fallback values
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'unknown',
+        action: 'unknown',
+        domain: 'unknown',
+        timestamp: expect.any(String),
+        outcome: 'denied' as const,
+        reason: TEXT.ERROR_INVALID_REQUEST
+      });
+    });
+
+    it('should audit when policyProvider.evaluate throws', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue({
+        secretId: 'TEST_API_KEY',
+        available: true,
+        description: 'Test API key'
+      });
+
+      const evaluationError = new Error('Policy evaluation failed');
+      mockPolicyProvider.evaluate = vi.fn().mockImplementation(() => {
+        throw evaluationError;
+      });
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
+      expect(result.code).toBe('execution_failed');
+
+      // Should have written audit for the policy evaluation error
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'TEST_API_KEY',
+        action: 'http_get',
+        domain: 'api.example.com',
+        timestamp: expect.any(String),
+        outcome: 'error' as const,
+        reason: 'Policy evaluation failed'
+      });
+    });
+
+    it('should reject empty header names after trimming', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data',
+          headers: {
+            '   ': 'value'  // Header name that's only whitespace
+          }
+        }
+      };
+
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_EMPTY_HEADER_NAME);
+      expect(result.code).toBe('invalid_headers');
+
+      // Should have written audit for invalid request
+      expect(mockAuditService.write).toHaveBeenCalledWith({
+        secretId: 'TEST_API_KEY',
+        action: 'http_get',
+        domain: 'unknown',
+        timestamp: expect.any(String),
+        outcome: 'denied' as const,
+        reason: TEXT.ERROR_INVALID_REQUEST
+      });
+    });
+
+
     it('should audit successful execution', async () => {
       const args = {
         secretId: 'TEST_API_KEY',
@@ -655,6 +757,26 @@ describe('UseSecretTool', () => {
         outcome: 'error' as const,
         reason: TEXT.ERROR_MISSING_ENV
       });
+    });
+
+    it('should return execution_failed code for unexpected errors', async () => {
+      const args = {
+        secretId: 'TEST_API_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+
+      vi.mocked(mockSecretProvider.getSecretInfo).mockImplementation(() => {
+        throw new Error('Unexpected error');
+      });
+
+      const result = await tool.execute(args);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unexpected error');
+      expect(result.code).toBe('execution_failed');
     });
   });
 });

@@ -164,7 +164,7 @@ describe('RateLimiterService', () => {
       rateLimiter.checkLimit(key);
       
       // Advance time beyond cleanup threshold (2x window)
-      vi.setSystemTime(now + 130000); // 130 seconds
+      vi.setSystemTime(now + (130 * CONFIG.MILLISECONDS_PER_SECOND)); // 130 seconds
       
       // Trigger cleanup
       vi.runOnlyPendingTimers();

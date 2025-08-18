@@ -16,12 +16,32 @@ const UseSecretSchema = z.object({
   secretId: z.string().min(1).transform(s => s.trim()),
   action: z.object({
     type: z.enum([TEXT.HTTP_METHOD_GET, TEXT.HTTP_METHOD_POST]),
-    url: z.string().url().transform(s => s.trim()),
+    url: z.string().transform(s => s.trim()).refine(
+      (val) => {
+        try {
+          new URL(val);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: TEXT.ERROR_INVALID_URL }
+    ),
     headers: z.record(z.string()).optional().transform(h => {
       if (!h) return undefined;
       const trimmed: Record<string, string> = {};
       for (const [key, value] of Object.entries(h)) {
-        trimmed[key.trim()] = value.trim();
+        const trimmedKey = key.trim();
+        if (trimmedKey === '') {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              message: TEXT.ERROR_EMPTY_HEADER_NAME,
+              path: ['headers', key]
+            }
+          ]);
+        }
+        trimmed[trimmedKey] = value.trim();
       }
       return trimmed;
     }),
@@ -120,9 +140,24 @@ export class UseSecretTool {
     
     try {
       // Validate and trim inputs
-      const validatedArgs = UseSecretSchema.parse(args) as UseSecretArgs;
-      secretId = validatedArgs.secretId;
-      action = validatedArgs.action;
+      let validatedArgs: UseSecretArgs;
+      try {
+        validatedArgs = UseSecretSchema.parse(args) as UseSecretArgs;
+        secretId = validatedArgs.secretId;
+        action = validatedArgs.action;
+      } catch (validationError) {
+        // Audit invalid request even when missing fields
+        const rawArgs = args as any;
+        await this.auditService.write({
+          secretId: rawArgs?.secretId || 'unknown',
+          action: rawArgs?.action?.type || 'unknown',
+          domain: 'unknown',
+          timestamp: new Date().toISOString(),
+          outcome: 'denied' as const,
+          reason: TEXT.ERROR_INVALID_REQUEST
+        });
+        throw validationError;
+      }
       
       // Extract and validate domain
       let url: URL;
@@ -190,11 +225,31 @@ export class UseSecretTool {
       }
       
       // Check policy
-      const accessDecision = this.policyProvider.evaluate(
-        secretId,
-        action.type,
-        domain
-      );
+      let accessDecision;
+      try {
+        accessDecision = this.policyProvider.evaluate(
+          secretId,
+          action.type,
+          domain
+        );
+      } catch (policyError) {
+        // Audit policy evaluation error
+        await this.auditService.write({
+          secretId,
+          action: action.type,
+          domain,
+          timestamp: new Date().toISOString(),
+          outcome: 'error' as const,
+          reason: policyError instanceof Error 
+            ? policyError.message 
+            : TEXT.ERROR_EXECUTION_FAILED
+        });
+        
+        throw new ToolError(
+          TEXT.ERROR_EXECUTION_FAILED,
+          CONFIG.ERROR_CODE_EXECUTION_FAILED
+        );
+      }
       
       if (!accessDecision.allowed) {
         await this.auditService.write({
@@ -234,7 +289,7 @@ export class UseSecretTool {
       let result;
       try {
         result = await this.actionExecutor.execute({
-          method: action.type === TEXT.HTTP_METHOD_GET ? 'GET' : 'POST',
+          method: action.type === TEXT.HTTP_METHOD_GET ? TEXT.HTTP_VERB_GET : TEXT.HTTP_VERB_POST,
           url: action.url,
           headers: action.headers,
           body: action.body,
@@ -289,46 +344,44 @@ export class UseSecretTool {
       }
       
       if (error instanceof z.ZodError) {
-        const errorMessage = TEXT.ERROR_INVALID_REQUEST;
+        // Check for specific error types
+        const hasEmptyHeader = error.errors.some(e => 
+          e.message === TEXT.ERROR_EMPTY_HEADER_NAME
+        );
         
-        // Audit invalid request
-        if (secretId || action) {
-          await this.auditService.write({
-            secretId: secretId || 'unknown',
-            action: action?.type || 'unknown',
-            domain: domain || 'unknown',
-            timestamp: new Date().toISOString(),
-            outcome: 'denied' as const,
-            reason: errorMessage
-          });
-        }
+        const errorMessage = hasEmptyHeader 
+          ? TEXT.ERROR_EMPTY_HEADER_NAME 
+          : TEXT.ERROR_INVALID_REQUEST;
+        const errorCode = hasEmptyHeader 
+          ? CONFIG.ERROR_CODE_INVALID_HEADERS 
+          : CONFIG.ERROR_CODE_INVALID_REQUEST;
         
         writeError(errorMessage, {
           level: 'ERROR',
-          code: CONFIG.ERROR_CODE_INVALID_REQUEST,
+          code: errorCode,
           details: error.errors
         });
         
         return {
           success: false,
           error: errorMessage,
-          code: CONFIG.ERROR_CODE_INVALID_REQUEST
+          code: errorCode
         };
       }
       
       const errorMessage = error instanceof Error 
         ? error.message 
-        : TEXT.ERROR_TOOL_EXECUTION_FAILED;
+        : TEXT.ERROR_EXECUTION_FAILED;
         
       writeError(errorMessage, {
         level: 'ERROR',
-        code: CONFIG.ERROR_CODE_UNKNOWN_TOOL
+        code: CONFIG.ERROR_CODE_EXECUTION_FAILED
       });
       
       return {
         success: false,
         error: errorMessage,
-        code: CONFIG.ERROR_CODE_UNKNOWN_TOOL
+        code: CONFIG.ERROR_CODE_EXECUTION_FAILED
       };
     }
   }
