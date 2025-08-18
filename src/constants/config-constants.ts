@@ -104,6 +104,14 @@ export const CONFIG = {
   // Supported actions for policies
   SUPPORTED_ACTIONS: ['http_get', 'http_post'] as const,
   
+  // HTTP header names
+  HEADER_AUTHORIZATION: 'authorization',
+  HEADER_USER_AGENT: 'user-agent',
+  HEADER_CONTENT_TYPE: 'content-type',
+  
+  // HTTP fetch options
+  FETCH_REDIRECT_MODE: 'manual' as const,
+  
   // Default values
   DEFAULT_TIMEZONE: 'UTC',
   DEFAULT_ENCODING: 'utf-8',
