@@ -52,6 +52,13 @@ export const TEXT = {
   FIELD_EXPIRES_AT: 'expiresAt',
   FIELD_REQUESTS: 'requests',
   FIELD_WINDOW_SECONDS: 'windowSeconds',
+  FIELD_METHOD: 'method',
+  FIELD_PAGE: 'page',
+  FIELD_PAGE_SIZE: 'pageSize',
+  FIELD_TOTAL_COUNT: 'totalCount',
+  FIELD_HAS_MORE: 'hasMore',
+  FIELD_START_TIME: 'startTime',
+  FIELD_END_TIME: 'endTime',
   
   // Log messages
   LOG_SERVER_STARTED: 'MCP server started',
