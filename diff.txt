@@ -1,0 +1,970 @@
+diff --git a/src/constants/text-constants.ts b/src/constants/text-constants.ts
+index 5bfa8a3..ac229ee 100644
+--- a/src/constants/text-constants.ts
++++ b/src/constants/text-constants.ts
+@@ -74,6 +74,7 @@ export const TEXT = {
+   FIELD_SECRETS: 'secrets',
+   FIELD_AVAILABLE: 'available',
+   FIELD_DESCRIPTION: 'description',
++  FIELD_ENTRIES: 'entries',
+   FIELD_ERROR: 'error',
+   FIELD_CODE: 'code',
+   FIELD_MESSAGE: 'message',
+@@ -128,6 +129,7 @@ export const TEXT = {
+   TOOL_DESC_USE: 'Use a secret to perform an action',
+   TOOL_DESC_AUDIT: 'Query audit log entries',
+   TOOL_DISCOVER_DESCRIPTION: 'List all available secret identifiers and their metadata',
++  TOOL_AUDIT_DESCRIPTION: 'Query audit log entries with filtering and pagination',
+   
+   // Input field descriptions
+   INPUT_DESC_SECRET_ID: 'The ID of the secret to describe policy for',
+diff --git a/src/index.ts b/src/index.ts
+index 883a4b4..1a52eab 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -12,7 +12,9 @@ import { RateLimiterService } from './services/rate-limiter.service.js';
+ import { DiscoverTool } from './tools/discover-tool.js';
+ import { DescribePolicyTool } from './tools/describe-policy-tool.js';
+ import { UseSecretTool } from './tools/use-secret-tool.js';
++import { QueryAuditTool } from './tools/query-audit-tool.js';
+ import { SecretMapping } from './interfaces/secret-mapping.interface.js';
++import { JsonlAuditService } from './services/audit-service.js';
+ import { writeError } from './utils/logging.js';
+ import { ToolError } from './utils/errors.js';
+ 
+@@ -83,7 +85,8 @@ async function executeTool(
+   args: unknown,
+   discoverTool: DiscoverTool,
+   describePolicyTool: DescribePolicyTool,
+-  useSecretTool: UseSecretTool
++  useSecretTool: UseSecretTool,
++  queryAuditTool: QueryAuditTool
+ ): Promise<unknown> {
+   switch (name) {
+     case TEXT.TOOL_DISCOVER:
+@@ -92,6 +95,8 @@ async function executeTool(
+       return await describePolicyTool.execute(args);
+     case TEXT.TOOL_USE:
+       return await useSecretTool.execute(args);
++    case TEXT.TOOL_AUDIT:
++      return await queryAuditTool.execute(args);
+     default:
+       throw new ToolError(
+         TEXT.ERROR_UNKNOWN_TOOL,
+@@ -119,6 +124,10 @@ async function main(): Promise<void> {
+   const policyProvider = new PolicyProviderService();
+   const actionExecutor = new HttpActionExecutor();
+   const rateLimiter = new RateLimiterService();
++  const auditService = new JsonlAuditService();
++  
++  // Initialize audit service
++  await auditService.initialize();
+   
+   // Load policies
+   await policyProvider.loadPolicies();
+@@ -127,6 +136,7 @@ async function main(): Promise<void> {
+   const discoverTool = new DiscoverTool(secretProvider);
+   const describePolicyTool = new DescribePolicyTool(policyProvider);
+   const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
++  const queryAuditTool = new QueryAuditTool(auditService);
+   
+   // Register tool listing handler
+   server.setRequestHandler(ListToolsRequestSchema, async () => ({
+@@ -134,6 +144,7 @@ async function main(): Promise<void> {
+       discoverTool.getTool(),
+       describePolicyTool.getTool(),
+       useSecretTool.getTool(),
++      queryAuditTool.getTool(),
+     ],
+   }));
+ 
+@@ -142,7 +153,7 @@ async function main(): Promise<void> {
+     const { name, arguments: args } = request.params;
+     
+     try {
+-      const result = await executeTool(name, args, discoverTool, describePolicyTool, useSecretTool);
++      const result = await executeTool(name, args, discoverTool, describePolicyTool, useSecretTool, queryAuditTool);
+       return createSuccessResponse(result);
+     } catch (error) {
+       return createErrorResponse(error, name);
+@@ -164,6 +175,7 @@ async function main(): Promise<void> {
+   // Handle shutdown signals
+   const shutdown = async () => {
+     writeError(TEXT.LOG_SERVER_STOPPED, { level: 'INFO' });
++    await auditService.close();
+     await server.close();
+     process.exit(CONFIG.EXIT_CODE_SUCCESS);
+   };
+diff --git a/src/tools/query-audit-tool.integration.test.ts b/src/tools/query-audit-tool.integration.test.ts
+new file mode 100644
+index 0000000..b7ba8fa
+--- /dev/null
++++ b/src/tools/query-audit-tool.integration.test.ts
+@@ -0,0 +1,274 @@
++import { describe, it, expect, beforeEach, afterEach } from 'vitest';
++import { QueryAuditTool } from './query-audit-tool.js';
++import { JsonlAuditService } from '../services/audit-service.js';
++import { TEXT } from '../constants/text-constants.js';
++import { CONFIG } from '../constants/config-constants.js';
++import * as fs from 'fs/promises';
++import * as path from 'path';
++import * as os from 'os';
++
++describe('QueryAuditTool Integration', () => {
++  let tool: QueryAuditTool;
++  let auditService: JsonlAuditService;
++  let tempDir: string;
++  
++  beforeEach(async () => {
++    // Create temp directory for audit files
++    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'audit-test-'));
++    
++    // Initialize real audit service
++    auditService = new JsonlAuditService(tempDir);
++    await auditService.initialize();
++    
++    // Create tool with real service
++    tool = new QueryAuditTool(auditService);
++  });
++  
++  afterEach(async () => {
++    // Cleanup
++    await auditService.close();
++    await fs.rm(tempDir, { recursive: true, force: true });
++  });
++  
++  describe('MCP SDK Integration', () => {
++    it('should provide correct tool definition for MCP', () => {
++      const toolDef = tool.getTool();
++      
++      // Verify MCP tool structure
++      expect(toolDef).toHaveProperty('name');
++      expect(toolDef).toHaveProperty('description');
++      expect(toolDef).toHaveProperty('inputSchema');
++      
++      // Verify schema is MCP-compatible JSON Schema
++      expect(toolDef.inputSchema.type).toBe('object');
++      expect(toolDef.inputSchema.properties).toBeDefined();
++      expect(Array.isArray(toolDef.inputSchema.required)).toBe(true);
++    });
++    
++    it('should handle MCP-style arguments', async () => {
++      // Write some test data
++      await auditService.write({
++        timestamp: new Date().toISOString(),
++        secretId: 'test_secret',
++        action: 'http_get',
++        outcome: 'success',
++        reason: 'Test entry',
++        domain: 'api.example.com'
++      });
++      
++      // Execute with MCP-style args (as would come from SDK)
++      const result = await tool.execute({
++        secretId: 'test_secret',
++        page: 1,
++        pageSize: 10
++      });
++      
++      // Verify response structure matches MCP expectations
++      expect(result).toHaveProperty(TEXT.FIELD_ENTRIES);
++      expect(result).toHaveProperty(TEXT.FIELD_TOTAL_COUNT);
++      expect(result).toHaveProperty(TEXT.FIELD_PAGE);
++      expect(result).toHaveProperty(TEXT.FIELD_PAGE_SIZE);
++      expect(result).toHaveProperty(TEXT.FIELD_HAS_MORE);
++      
++      // Verify response is JSON-serializable
++      const serialized = JSON.stringify(result);
++      const deserialized = JSON.parse(serialized);
++      expect(deserialized).toEqual(result);
++    });
++  });
++  
++  describe('Real Audit Service Integration', () => {
++    it('should query real audit entries from JSONL files', async () => {
++      // Write multiple entries
++      const entries = [
++        {
++          timestamp: '2024-01-01T10:00:00Z',
++          secretId: 'api_key',
++          action: 'http_get',
++          outcome: 'success' as const,
++          reason: 'Allowed by policy',
++          domain: 'api.openai.com'
++        },
++        {
++          timestamp: '2024-01-01T11:00:00Z',
++          secretId: 'db_password',
++          action: 'http_post',
++          outcome: 'denied' as const,
++          reason: 'Domain not allowed'
++        },
++        {
++          timestamp: '2024-01-01T12:00:00Z',
++          secretId: 'api_key',
++          action: 'http_post',
++          outcome: 'error' as const,
++          reason: 'Network timeout'
++        }
++      ];
++      
++      for (const entry of entries) {
++        await auditService.write(entry);
++      }
++      
++      // Query all entries
++      const allResult = await tool.execute({});
++      expect(allResult[TEXT.FIELD_ENTRIES]).toHaveLength(3);
++      expect(allResult[TEXT.FIELD_TOTAL_COUNT]).toBe(3);
++      
++      // Query with filter
++      const filteredResult = await tool.execute({
++        secretId: 'api_key'
++      });
++      expect(filteredResult[TEXT.FIELD_ENTRIES]).toHaveLength(2);
++      
++      // Query with pagination
++      const page1 = await tool.execute({
++        pageSize: 2
++      });
++      expect(page1[TEXT.FIELD_ENTRIES]).toHaveLength(2);
++      expect(page1[TEXT.FIELD_HAS_MORE]).toBe(true);
++      
++      const page2 = await tool.execute({
++        page: 2,
++        pageSize: 2
++      });
++      expect(page2[TEXT.FIELD_ENTRIES]).toHaveLength(1);
++      expect(page2[TEXT.FIELD_HAS_MORE]).toBe(false);
++    });
++    
++    it('should handle file rotation correctly', async () => {
++      // Force rotation by writing entries
++      await auditService.rotate();
++      
++      // Write to first file
++      await auditService.write({
++        timestamp: '2024-01-01T10:00:00Z',
++        secretId: 'old_secret',
++        action: 'http_get',
++        outcome: 'success',
++        reason: 'Old entry'
++      });
++      
++      // Force another rotation
++      await auditService.rotate();
++      
++      // Write to new file
++      await auditService.write({
++        timestamp: '2024-01-02T10:00:00Z',
++        secretId: 'new_secret',
++        action: 'http_post',
++        outcome: 'success',
++        reason: 'New entry'
++      });
++      
++      // Query should find entries from both files
++      const result = await tool.execute({});
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(2);
++      expect(result[TEXT.FIELD_TOTAL_COUNT]).toBe(2);
++    });
++    
++    it('should handle concurrent writes and queries', async () => {
++      // Simulate concurrent operations
++      const writePromises = [];
++      const queryPromises = [];
++      
++      // Start concurrent writes
++      for (let i = 0; i < 10; i++) {
++        writePromises.push(
++          auditService.write({
++            timestamp: new Date(2024, 0, 1, 10, i).toISOString(),
++            secretId: `secret_${i}`,
++            action: 'http_get',
++            outcome: 'success',
++            reason: `Entry ${i}`
++          })
++        );
++      }
++      
++      // Start concurrent queries
++      for (let i = 0; i < 5; i++) {
++        queryPromises.push(
++          tool.execute({ page: i + 1, pageSize: 2 })
++        );
++      }
++      
++      // Wait for all operations
++      await Promise.all(writePromises);
++      const queryResults = await Promise.all(queryPromises);
++      
++      // Verify queries completed without errors
++      queryResults.forEach(result => {
++        expect(result).toHaveProperty(TEXT.FIELD_ENTRIES);
++        expect(result).toHaveProperty(TEXT.FIELD_TOTAL_COUNT);
++      });
++      
++      // Final query should see all entries
++      const finalResult = await tool.execute({});
++      expect(finalResult[TEXT.FIELD_TOTAL_COUNT]).toBe(10);
++    });
++    
++    it('should handle empty audit directory gracefully', async () => {
++      // Query empty audit log
++      const result = await tool.execute({});
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toEqual([]);
++      expect(result[TEXT.FIELD_TOTAL_COUNT]).toBe(0);
++      expect(result[TEXT.FIELD_HAS_MORE]).toBe(false);
++    });
++    
++    it('should validate and reject malformed input', async () => {
++      // Test various invalid inputs
++      await expect(tool.execute({
++        pageSize: CONFIG.AUDIT_MAX_PAGE_SIZE + 100
++      })).rejects.toThrow();
++      
++      await expect(tool.execute({
++        page: -5
++      })).rejects.toThrow();
++      
++      await expect(tool.execute({
++        outcome: 'invalid_outcome' as any
++      })).rejects.toThrow();
++      
++      await expect(tool.execute({
++        startTime: '2024-01-02T00:00:00Z',
++        endTime: '2024-01-01T00:00:00Z'
++      })).rejects.toThrow();
++    });
++  });
++  
++  describe('Performance', () => {
++    it('should handle large datasets efficiently', async () => {
++      // Write many entries
++      const entryCount = 1000;
++      const startWrite = Date.now();
++      
++      for (let i = 0; i < entryCount; i++) {
++        await auditService.write({
++          timestamp: new Date(2024, 0, 1, 0, 0, i).toISOString(),
++          secretId: `secret_${i % 10}`,
++          action: i % 2 === 0 ? 'http_get' : 'http_post',
++          outcome: i % 3 === 0 ? 'success' : i % 3 === 1 ? 'denied' : 'error',
++          reason: `Test entry ${i}`
++        });
++      }
++      
++      const writeTime = Date.now() - startWrite;
++      console.log(`Written ${entryCount} entries in ${writeTime}ms`);
++      
++      // Query with filters
++      const startQuery = Date.now();
++      const result = await tool.execute({
++        secretId: 'secret_5',
++        outcome: 'success',
++        pageSize: 20
++      });
++      const queryTime = Date.now() - startQuery;
++      
++      console.log(`Queried ${result[TEXT.FIELD_TOTAL_COUNT]} filtered entries in ${queryTime}ms`);
++      
++      // Performance assertions
++      expect(queryTime).toBeLessThan(1000); // Query should complete within 1 second
++      expect(result[TEXT.FIELD_ENTRIES]).toBeDefined();
++    });
++  });
++});
+\ No newline at end of file
+diff --git a/src/tools/query-audit-tool.test.ts b/src/tools/query-audit-tool.test.ts
+new file mode 100644
+index 0000000..1710504
+--- /dev/null
++++ b/src/tools/query-audit-tool.test.ts
+@@ -0,0 +1,421 @@
++import { describe, it, expect, beforeEach, vi } from 'vitest';
++import { QueryAuditTool } from './query-audit-tool.js';
++import { AuditService, AuditQueryResult, AuditEntry } from '../interfaces/audit.interface.js';
++import { TEXT } from '../constants/text-constants.js';
++import { CONFIG } from '../constants/config-constants.js';
++import { ToolError } from '../utils/errors.js';
++
++// Mock audit service
++class MockAuditService implements AuditService {
++  private entries: AuditEntry[] = [];
++  
++  async initialize(): Promise<void> {}
++  
++  async write(entry: AuditEntry): Promise<void> {
++    this.entries.push(entry);
++  }
++  
++  async rotate(): Promise<void> {}
++  
++  async query(options?: any): Promise<AuditQueryResult> {
++    let filtered = [...this.entries];
++    
++    // Apply filters
++    if (options?.secretId) {
++      filtered = filtered.filter(e => e.secretId === options.secretId);
++    }
++    
++    if (options?.outcome) {
++      filtered = filtered.filter(e => e.outcome === options.outcome);
++    }
++    
++    if (options?.startTime) {
++      const start = new Date(options.startTime).getTime();
++      filtered = filtered.filter(e => new Date(e.timestamp).getTime() >= start);
++    }
++    
++    if (options?.endTime) {
++      const end = new Date(options.endTime).getTime();
++      filtered = filtered.filter(e => new Date(e.timestamp).getTime() <= end);
++    }
++    
++    // Sort by timestamp descending
++    filtered.sort((a, b) => 
++      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
++    );
++    
++    // Apply pagination
++    const page = options?.page ?? CONFIG.DEFAULT_PAGE_NUMBER;
++    const pageSize = options?.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE;
++    const startIndex = (page - 1) * pageSize;
++    const endIndex = startIndex + pageSize;
++    
++    const paginated = filtered.slice(startIndex, endIndex);
++    
++    return {
++      entries: paginated,
++      totalCount: filtered.length,
++      page,
++      pageSize,
++      hasMore: endIndex < filtered.length
++    };
++  }
++  
++  async cleanup(_maxAgeMs: number): Promise<void> {}
++  async close(): Promise<void> {}
++  
++  // Test helper to add entries
++  addTestEntry(entry: AuditEntry): void {
++    this.entries.push(entry);
++  }
++  
++  // Test helper to clear entries
++  clearEntries(): void {
++    this.entries = [];
++  }
++}
++
++describe('QueryAuditTool', () => {
++  let tool: QueryAuditTool;
++  let mockAuditService: MockAuditService;
++  
++  beforeEach(() => {
++    mockAuditService = new MockAuditService();
++    tool = new QueryAuditTool(mockAuditService);
++  });
++  
++  describe('getTool', () => {
++    it('should return tool definition with correct metadata', () => {
++      const toolDef = tool.getTool();
++      
++      expect(toolDef.name).toBe(TEXT.TOOL_AUDIT);
++      expect(toolDef.description).toBe(TEXT.TOOL_AUDIT_DESCRIPTION);
++      expect(toolDef.inputSchema).toBeDefined();
++      expect(toolDef.inputSchema.type).toBe('object');
++      expect(toolDef.inputSchema.properties).toBeDefined();
++      expect(toolDef.inputSchema.required).toEqual([]);
++    });
++    
++    it('should define all expected input properties', () => {
++      const toolDef = tool.getTool();
++      const props = toolDef.inputSchema.properties;
++      
++      expect(props).toHaveProperty('secretId');
++      expect(props).toHaveProperty('startTime');
++      expect(props).toHaveProperty('endTime');
++      expect(props).toHaveProperty('outcome');
++      expect(props).toHaveProperty('page');
++      expect(props).toHaveProperty('pageSize');
++    });
++  });
++  
++  describe('execute', () => {
++    const sampleEntry1: AuditEntry = {
++      timestamp: '2024-01-01T10:00:00Z',
++      secretId: 'api_key',
++      action: 'http_get',
++      outcome: 'success',
++      reason: 'Allowed by policy',
++      domain: 'api.example.com',
++      method: 'GET'
++    };
++    
++    const sampleEntry2: AuditEntry = {
++      timestamp: '2024-01-01T11:00:00Z',
++      secretId: 'db_password',
++      action: 'http_post',
++      outcome: 'denied',
++      reason: 'Domain not allowed',
++      domain: 'evil.com',
++      method: 'POST'
++    };
++    
++    const sampleEntry3: AuditEntry = {
++      timestamp: '2024-01-01T12:00:00Z',
++      secretId: 'api_key',
++      action: 'http_get',
++      outcome: 'error',
++      reason: 'Network timeout'
++    };
++    
++    beforeEach(() => {
++      mockAuditService.clearEntries();
++      mockAuditService.addTestEntry(sampleEntry1);
++      mockAuditService.addTestEntry(sampleEntry2);
++      mockAuditService.addTestEntry(sampleEntry3);
++    });
++    
++    it('should return all entries when no filters provided', async () => {
++      const result = await tool.execute({});
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(3);
++      expect(result[TEXT.FIELD_TOTAL_COUNT]).toBe(3);
++      expect(result[TEXT.FIELD_PAGE]).toBe(1);
++      expect(result[TEXT.FIELD_HAS_MORE]).toBe(false);
++    });
++    
++    it('should filter by secretId', async () => {
++      const result = await tool.execute({ secretId: 'api_key' });
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(2);
++      expect(result[TEXT.FIELD_TOTAL_COUNT]).toBe(2);
++      expect(result[TEXT.FIELD_ENTRIES][0]![TEXT.FIELD_SECRET_ID]).toBe('api_key');
++      expect(result[TEXT.FIELD_ENTRIES][1]![TEXT.FIELD_SECRET_ID]).toBe('api_key');
++    });
++    
++    it('should filter by outcome', async () => {
++      const result = await tool.execute({ outcome: 'denied' });
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(1);
++      expect(result[TEXT.FIELD_TOTAL_COUNT]).toBe(1);
++      expect(result[TEXT.FIELD_ENTRIES][0]![TEXT.FIELD_OUTCOME]).toBe('denied');
++    });
++    
++    it('should filter by time range', async () => {
++      const result = await tool.execute({
++        startTime: '2024-01-01T10:30:00Z',
++        endTime: '2024-01-01T11:30:00Z'
++      });
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(1);
++      expect(result[TEXT.FIELD_ENTRIES][0]![TEXT.FIELD_SECRET_ID]).toBe('db_password');
++    });
++    
++    it('should support pagination', async () => {
++      const result = await tool.execute({
++        page: 1,
++        pageSize: 2
++      });
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(2);
++      expect(result[TEXT.FIELD_PAGE]).toBe(1);
++      expect(result[TEXT.FIELD_PAGE_SIZE]).toBe(2);
++      expect(result[TEXT.FIELD_HAS_MORE]).toBe(true);
++      
++      const page2 = await tool.execute({
++        page: 2,
++        pageSize: 2
++      });
++      
++      expect(page2[TEXT.FIELD_ENTRIES]).toHaveLength(1);
++      expect(page2[TEXT.FIELD_PAGE]).toBe(2);
++      expect(page2[TEXT.FIELD_HAS_MORE]).toBe(false);
++    });
++    
++    it('should combine multiple filters', async () => {
++      const result = await tool.execute({
++        secretId: 'api_key',
++        outcome: 'success'
++      });
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(1);
++      expect(result[TEXT.FIELD_ENTRIES][0]![TEXT.FIELD_SECRET_ID]).toBe('api_key');
++      expect(result[TEXT.FIELD_ENTRIES][0]![TEXT.FIELD_OUTCOME]).toBe('success');
++    });
++    
++    it('should return entries sorted by timestamp descending', async () => {
++      const result = await tool.execute({});
++      
++      const timestamps = result[TEXT.FIELD_ENTRIES].map(
++        (e: any) => e[TEXT.FIELD_TIMESTAMP]
++      );
++      
++      expect(timestamps[0]).toBe('2024-01-01T12:00:00Z');
++      expect(timestamps[1]).toBe('2024-01-01T11:00:00Z');
++      expect(timestamps[2]).toBe('2024-01-01T10:00:00Z');
++    });
++    
++    it('should include optional fields when present', async () => {
++      const result = await tool.execute({});
++      
++      const entryWithDomain = result[TEXT.FIELD_ENTRIES].find(
++        (e: any) => e[TEXT.FIELD_DOMAIN] === 'api.example.com'
++      );
++      
++      expect(entryWithDomain).toBeDefined();
++      expect(entryWithDomain![TEXT.FIELD_METHOD]).toBe('GET');
++    });
++    
++    it('should not include optional fields when absent', async () => {
++      const result = await tool.execute({});
++      
++      const entryWithoutDomain = result[TEXT.FIELD_ENTRIES].find(
++        (e: any) => e[TEXT.FIELD_REASON] === 'Network timeout'
++      );
++      
++      expect(entryWithoutDomain).toBeDefined();
++      expect(entryWithoutDomain![TEXT.FIELD_DOMAIN]).toBeUndefined();
++      expect(entryWithoutDomain![TEXT.FIELD_METHOD]).toBeUndefined();
++    });
++    
++    it('should return immutable response', async () => {
++      const result = await tool.execute({});
++      
++      expect(Object.isFrozen(result)).toBe(true);
++      expect(Object.isFrozen(result[TEXT.FIELD_ENTRIES])).toBe(true);
++      
++      if (result[TEXT.FIELD_ENTRIES].length > 0) {
++        expect(Object.isFrozen(result[TEXT.FIELD_ENTRIES][0])).toBe(true);
++      }
++    });
++    
++    it('should handle empty results', async () => {
++      mockAuditService.clearEntries();
++      
++      const result = await tool.execute({});
++      
++      expect(result[TEXT.FIELD_ENTRIES]).toHaveLength(0);
++      expect(result[TEXT.FIELD_TOTAL_COUNT]).toBe(0);
++      expect(result[TEXT.FIELD_HAS_MORE]).toBe(false);
++    });
++    
++    it('should validate page size limit', async () => {
++      await expect(tool.execute({
++        pageSize: CONFIG.AUDIT_MAX_PAGE_SIZE + 1
++      })).rejects.toThrow(ToolError);
++    });
++    
++    it('should validate positive page number', async () => {
++      await expect(tool.execute({
++        page: 0
++      })).rejects.toThrow(ToolError);
++      
++      await expect(tool.execute({
++        page: -1
++      })).rejects.toThrow(ToolError);
++    });
++    
++    it('should validate outcome enum values', async () => {
++      await expect(tool.execute({
++        outcome: 'invalid' as any
++      })).rejects.toThrow(ToolError);
++    });
++    
++    it('should reject invalid time format', async () => {
++      await expect(tool.execute({
++        startTime: 'not-a-date'
++      })).rejects.toThrow(ToolError);
++    });
++    
++    it('should reject when start time is after end time', async () => {
++      await expect(tool.execute({
++        startTime: '2024-01-02T00:00:00Z',
++        endTime: '2024-01-01T00:00:00Z'
++      })).rejects.toThrow(ToolError);
++    });
++    
++    it('should trim string inputs', async () => {
++      const result = await tool.execute({
++        secretId: '  api_key  ',
++        startTime: '  2024-01-01T00:00:00Z  ',
++        endTime: '  2024-01-02T00:00:00Z  '
++      });
++      
++      // Should work without errors after trimming
++      expect(result[TEXT.FIELD_ENTRIES]).toBeDefined();
++    });
++    
++    it('should handle null/undefined args gracefully', async () => {
++      const result1 = await tool.execute(null);
++      expect(result1[TEXT.FIELD_ENTRIES]).toBeDefined();
++      
++      const result2 = await tool.execute(undefined);
++      expect(result2[TEXT.FIELD_ENTRIES]).toBeDefined();
++      
++      const result3 = await tool.execute({});
++      expect(result3[TEXT.FIELD_ENTRIES]).toBeDefined();
++    });
++    
++    it('should reject extra properties in input', async () => {
++      await expect(tool.execute({
++        secretId: 'api_key',
++        extraField: 'not-allowed'
++      })).rejects.toThrow(ToolError);
++    });
++  });
++  
++  describe('error handling', () => {
++    it('should throw ToolError with correct code for invalid request', async () => {
++      try {
++        await tool.execute({ page: 'not-a-number' as any });
++        expect.fail('Should have thrown');
++      } catch (error) {
++        expect(error).toBeInstanceOf(ToolError);
++        expect((error as ToolError).code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
++        expect((error as ToolError).message).toBe(TEXT.ERROR_INVALID_REQUEST);
++      }
++    });
++    
++    it('should handle audit service errors gracefully', async () => {
++      const errorService = {
++        ...mockAuditService,
++        query: vi.fn().mockRejectedValue(new Error('Database error'))
++      } as any;
++      
++      const errorTool = new QueryAuditTool(errorService);
++      
++      await expect(errorTool.execute({})).rejects.toThrow();
++    });
++  });
++  
++  describe('integration scenarios', () => {
++    it('should handle large datasets with pagination', async () => {
++      mockAuditService.clearEntries();
++      
++      // Add 100 entries
++      for (let i = 0; i < 100; i++) {
++        mockAuditService.addTestEntry({
++          timestamp: new Date(2024, 0, 1, 10, i).toISOString(),
++          secretId: `secret_${i % 5}`,
++          action: 'http_get',
++          outcome: i % 3 === 0 ? 'success' : i % 3 === 1 ? 'denied' : 'error',
++          reason: `Test reason ${i}`
++        });
++      }
++      
++      const page1 = await tool.execute({ pageSize: 20 });
++      expect(page1[TEXT.FIELD_ENTRIES]).toHaveLength(20);
++      expect(page1[TEXT.FIELD_TOTAL_COUNT]).toBe(100);
++      expect(page1[TEXT.FIELD_HAS_MORE]).toBe(true);
++      
++      const page5 = await tool.execute({ page: 5, pageSize: 20 });
++      expect(page5[TEXT.FIELD_ENTRIES]).toHaveLength(20);
++      expect(page5[TEXT.FIELD_HAS_MORE]).toBe(false);
++    });
++    
++    it('should handle complex filter combinations', async () => {
++      mockAuditService.clearEntries();
++      
++      // Add varied test data
++      const now = new Date('2024-01-15T12:00:00Z');
++      
++      for (let days = -10; days <= 10; days++) {
++        const timestamp = new Date(now);
++        timestamp.setDate(timestamp.getDate() + days);
++        
++        mockAuditService.addTestEntry({
++          timestamp: timestamp.toISOString(),
++          secretId: days < 0 ? 'old_secret' : 'new_secret',
++          action: 'http_get',
++          outcome: days % 2 === 0 ? 'success' : 'denied',
++          reason: `Day ${days}`
++        });
++      }
++      
++      // Query recent successful uses of new_secret
++      const result = await tool.execute({
++        secretId: 'new_secret',
++        outcome: 'success',
++        startTime: '2024-01-15T00:00:00Z'
++      });
++      
++      expect(result[TEXT.FIELD_TOTAL_COUNT]).toBeGreaterThan(0);
++      result[TEXT.FIELD_ENTRIES].forEach((entry: any) => {
++        expect(entry[TEXT.FIELD_SECRET_ID]).toBe('new_secret');
++        expect(entry[TEXT.FIELD_OUTCOME]).toBe('success');
++        expect(new Date(entry[TEXT.FIELD_TIMESTAMP]).getTime())
++          .toBeGreaterThanOrEqual(new Date('2024-01-15T00:00:00Z').getTime());
++      });
++    });
++  });
++});
+\ No newline at end of file
+diff --git a/src/tools/query-audit-tool.ts b/src/tools/query-audit-tool.ts
+new file mode 100644
+index 0000000..0394c4d
+--- /dev/null
++++ b/src/tools/query-audit-tool.ts
+@@ -0,0 +1,157 @@
++import { Tool } from '@modelcontextprotocol/sdk/types.js';
++import { AuditService, AuditQueryOptions } from '../interfaces/audit.interface.js';
++import { TEXT } from '../constants/text-constants.js';
++import { CONFIG } from '../constants/config-constants.js';
++import { ToolError } from '../utils/errors.js';
++import { z } from 'zod';
++
++const QueryAuditSchema = z.object({
++  secretId: z.string().trim().optional(),
++  startTime: z.string().trim().optional(),
++  endTime: z.string().trim().optional(),
++  outcome: z.enum(['success', 'denied', 'error']).optional(),
++  page: z.number().int().positive().optional(),
++  pageSize: z.number().int().positive().max(CONFIG.AUDIT_MAX_PAGE_SIZE).optional()
++}).strict();
++
++export type QueryAuditRequest = z.infer<typeof QueryAuditSchema>;
++
++export interface QueryAuditResponse {
++  readonly entries: ReadonlyArray<{
++    readonly timestamp: string;
++    readonly secretId: string;
++    readonly action: string;
++    readonly outcome: string;
++    readonly reason: string;
++    readonly domain?: string;
++    readonly method?: string;
++  }>;
++  readonly totalCount: number;
++  readonly page: number;
++  readonly pageSize: number;
++  readonly hasMore: boolean;
++}
++
++export class QueryAuditTool {
++  private readonly tool: Tool;
++
++  constructor(private readonly auditService: AuditService) {
++    this.tool = {
++      name: TEXT.TOOL_AUDIT,
++      description: TEXT.TOOL_AUDIT_DESCRIPTION || 'Query audit log entries with filtering and pagination',
++      inputSchema: {
++        type: 'object',
++        properties: {
++          secretId: {
++            type: 'string',
++            description: 'Filter by secret identifier'
++          },
++          startTime: {
++            type: 'string',
++            description: 'Start time for filtering (ISO 8601 format)'
++          },
++          endTime: {
++            type: 'string',
++            description: 'End time for filtering (ISO 8601 format)'
++          },
++          outcome: {
++            type: 'string',
++            enum: ['success', 'denied', 'error'],
++            description: 'Filter by outcome'
++          },
++          page: {
++            type: 'number',
++            description: 'Page number (starts at 1)'
++          },
++          pageSize: {
++            type: 'number',
++            description: `Number of entries per page (max ${CONFIG.AUDIT_MAX_PAGE_SIZE})`
++          }
++        },
++        required: []
++      }
++    };
++  }
++
++  getTool(): Tool {
++    return this.tool;
++  }
++
++  async execute(args: unknown): Promise<QueryAuditResponse> {
++    let validatedArgs: QueryAuditRequest;
++    
++    try {
++      validatedArgs = QueryAuditSchema.parse(args || {});
++    } catch (error) {
++      throw new ToolError(
++        TEXT.ERROR_INVALID_REQUEST,
++        CONFIG.ERROR_CODE_INVALID_REQUEST
++      );
++    }
++
++    // Validate time range if provided
++    if (validatedArgs.startTime) {
++      const start = new Date(validatedArgs.startTime).getTime();
++      if (isNaN(start)) {
++        throw new ToolError(
++          TEXT.ERROR_INVALID_REQUEST,
++          CONFIG.ERROR_CODE_INVALID_REQUEST
++        );
++      }
++    }
++    
++    if (validatedArgs.endTime) {
++      const end = new Date(validatedArgs.endTime).getTime();
++      if (isNaN(end)) {
++        throw new ToolError(
++          TEXT.ERROR_INVALID_REQUEST,
++          CONFIG.ERROR_CODE_INVALID_REQUEST
++        );
++      }
++    }
++    
++    if (validatedArgs.startTime && validatedArgs.endTime) {
++      const start = new Date(validatedArgs.startTime).getTime();
++      const end = new Date(validatedArgs.endTime).getTime();
++      
++      if (start > end) {
++        throw new ToolError(
++          TEXT.ERROR_INVALID_REQUEST,
++          CONFIG.ERROR_CODE_INVALID_REQUEST
++        );
++      }
++    }
++
++    // Build query options
++    const options: AuditQueryOptions = {
++      secretId: validatedArgs.secretId,
++      startTime: validatedArgs.startTime,
++      endTime: validatedArgs.endTime,
++      outcome: validatedArgs.outcome,
++      page: validatedArgs.page ?? CONFIG.DEFAULT_PAGE_NUMBER,
++      pageSize: validatedArgs.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE
++    };
++
++    // Query audit entries
++    const result = await this.auditService.query(options);
++
++    // Format response with immutable entries
++    const formattedEntries = result.entries.map(entry => Object.freeze({
++      [TEXT.FIELD_TIMESTAMP]: entry.timestamp,
++      [TEXT.FIELD_SECRET_ID]: entry.secretId,
++      [TEXT.FIELD_ACTION]: entry.action,
++      [TEXT.FIELD_OUTCOME]: entry.outcome,
++      [TEXT.FIELD_REASON]: entry.reason,
++      ...(entry.domain && { [TEXT.FIELD_DOMAIN]: entry.domain }),
++      ...(entry.method && { [TEXT.FIELD_METHOD]: entry.method })
++    }));
++
++    return Object.freeze({
++      [TEXT.FIELD_ENTRIES]: Object.freeze(formattedEntries),
++      [TEXT.FIELD_TOTAL_COUNT]: result.totalCount,
++      [TEXT.FIELD_PAGE]: result.page,
++      [TEXT.FIELD_PAGE_SIZE]: result.pageSize,
++      [TEXT.FIELD_HAS_MORE]: result.hasMore
++    });
++  }
++}
+\ No newline at end of file

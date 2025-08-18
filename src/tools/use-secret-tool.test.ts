@@ -164,7 +164,9 @@ describe('UseSecretTool', () => {
       expect(mockActionExecutor.execute).toHaveBeenCalledWith({
         method: TEXT.HTTP_VERB_GET,
         url: 'https://api.example.com/data',
-        headers: undefined,
+        headers: {
+          [TEXT.AUTHORIZATION_HEADER]: 'Bearer secret-value-123'
+        },
         body: undefined,
         secretValue: 'secret-value-123',
         injectionType: 'bearer'
@@ -189,7 +191,8 @@ describe('UseSecretTool', () => {
 
       mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
         allowed: false,
-        message: TEXT.ERROR_FORBIDDEN_DOMAIN
+        message: TEXT.ERROR_FORBIDDEN_DOMAIN,
+        code: CONFIG.ERROR_CODE_FORBIDDEN_DOMAIN
       });
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
@@ -197,7 +200,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
+      expect(result.message).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
       expect(result.code).toBeDefined();
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -226,7 +229,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
+      expect(result.message).toBe(TEXT.ERROR_UNKNOWN_SECRET);
       expect(result.code).toBe('unknown_secret');
     });
 
@@ -248,7 +251,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
+      expect(result.message).toBe(TEXT.ERROR_UNKNOWN_SECRET);
       expect(result.code).toBe('unknown_secret');
     });
 
@@ -261,7 +264,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_REQUEST);
       expect(result.code).toBe('invalid_request');
     });
 
@@ -277,7 +280,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_URL);
       expect(result.code).toBe('invalid_url');
     });
 
@@ -333,7 +336,8 @@ describe('UseSecretTool', () => {
         url: 'https://api.example.com/submit',
         headers: {
           'Content-Type': 'application/json',
-          'X-Custom-Header': 'custom-value'
+          'X-Custom-Header': 'custom-value',
+          [TEXT.AUTHORIZATION_HEADER]: 'Bearer secret-value-123'
         },
         body: '{"key": "value"}',
         secretValue: 'secret-value-123',
@@ -403,7 +407,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_RATE_LIMITED);
+      expect(result.message).toBe(TEXT.ERROR_RATE_LIMITED);
       expect(result.code).toBe('rate_limited');
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -479,7 +483,8 @@ describe('UseSecretTool', () => {
         expect.objectContaining({
           url: 'https://api.example.com/data',
           headers: {
-            'X-Custom': 'value'
+            'X-Custom': 'value',
+            [TEXT.AUTHORIZATION_HEADER]: 'Bearer secret'
           }
         })
       );
@@ -499,7 +504,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_URL);
       expect(result.code).toBe('invalid_url');
     });
 
@@ -557,7 +562,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_METHOD);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_METHOD);
       expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_METHOD);
     });
 
@@ -576,7 +581,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_INJECTION_TYPE);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_INJECTION_TYPE);
       expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE);
     });
 
@@ -675,7 +680,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_REQUEST);
       expect(result.code).toBe('invalid_request');
 
       // Should have written audit with fallback values
@@ -714,7 +719,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
+      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
 
       // Should have written audit for the policy evaluation error
@@ -724,7 +729,7 @@ describe('UseSecretTool', () => {
         domain: 'api.example.com',
         timestamp: expect.any(String),
         outcome: TEXT.AUDIT_OUTCOME_ERROR,
-        reason: 'Policy evaluation failed'
+        reason: TEXT.ERROR_EXECUTION_FAILED
       });
     });
 
@@ -745,7 +750,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_EMPTY_HEADER_NAME);
+      expect(result.message).toBe(TEXT.ERROR_INVALID_HEADERS);
       expect(result.code).toBe('invalid_headers');
 
       // Should have written audit for invalid request
@@ -839,7 +844,7 @@ describe('UseSecretTool', () => {
         domain: 'api.example.com',
         timestamp: expect.any(String),
         outcome: TEXT.AUDIT_OUTCOME_ERROR,
-        reason: 'Network timeout'
+        reason: TEXT.ERROR_EXECUTION_FAILED
       });
     });
 
@@ -869,7 +874,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_MISSING_ENV);
+      expect(result.message).toBe(TEXT.ERROR_MISSING_ENV);
       expect(result.code).toBe('missing_env');
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -898,7 +903,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Unexpected error');
+      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
     });
 
@@ -921,7 +926,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Unexpected database error');
+      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
 
       // Verify audit entry was created with error outcome
@@ -965,7 +970,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Network request failed');
+      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
 
       // Should only write one audit entry (from executeSecretAction, not from handleExecutionError)
@@ -976,7 +981,7 @@ describe('UseSecretTool', () => {
         domain: 'api.example.com',
         timestamp: expect.any(String),
         outcome: TEXT.AUDIT_OUTCOME_ERROR,
-        reason: 'Network request failed'
+        reason: TEXT.ERROR_EXECUTION_FAILED
       });
     });
   });
