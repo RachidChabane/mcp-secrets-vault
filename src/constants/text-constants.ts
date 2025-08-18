@@ -50,6 +50,9 @@ export const TEXT = {
   // Field names
   FIELD_SECRET_ID: 'secretId',
   FIELD_ACTION: 'action',
+  FIELD_TYPE: 'type',
+  FIELD_URL: 'url',
+  FIELD_INJECTION_TYPE_LOWER: 'injectionType',
   FIELD_DOMAIN: 'domain',
   FIELD_TIMESTAMP: 'timestamp',
   FIELD_OUTCOME: 'outcome',
@@ -140,6 +143,10 @@ export const TEXT = {
   SCHEMA_PROPERTIES: 'properties',
   SCHEMA_REQUIRED: 'required',
   SCHEMA_TYPE: 'type',
+  
+  // Schema required arrays
+  SCHEMA_REQUIRED_ACTION: ['type', 'url'] as string[],
+  SCHEMA_REQUIRED_USE_SECRET: ['secretId', 'action'] as string[],
   
   // Field values
   FIELD_VALUE_UNKNOWN: 'unknown',

@@ -139,10 +139,10 @@ export class UseSecretTool {
                 description: TEXT.INPUT_DESC_INJECTION_TYPE
               }
             },
-            required: ['type', 'url']
+            required: TEXT.SCHEMA_REQUIRED_ACTION
           }
         },
-        required: ['secretId', 'action']
+        required: TEXT.SCHEMA_REQUIRED_USE_SECRET
       }
     };
   }
@@ -170,11 +170,37 @@ export class UseSecretTool {
   }
 
   /**
+   * Parses and validates arguments using the schema
+   */
+  private parseAndValidateArgs(args: unknown): UseSecretArgs {
+    const validatedArgs = UseSecretSchema.parse(args) as UseSecretArgs;
+    new URL(validatedArgs.action.url); // Validate URL format
+    return validatedArgs;
+  }
+
+  /**
+   * Handles validation failures with audit logging
+   */
+  private async handleValidationFailure(args: unknown, validationError: unknown): Promise<never> {
+    const rawArgs = args as any;
+    await this.auditRequest(
+      {
+        secretId: rawArgs?.secretId,
+        action: rawArgs?.action?.type,
+        domain: undefined
+      },
+      TEXT.AUDIT_OUTCOME_DENIED,
+      TEXT.ERROR_INVALID_REQUEST
+    );
+    throw validationError;
+  }
+
+  /**
    * Validates input arguments and extracts request parameters
    */
   private async validateAndExtractRequest(args: unknown): Promise<ValidatedRequest> {
     try {
-      const validatedArgs = UseSecretSchema.parse(args) as UseSecretArgs;
+      const validatedArgs = this.parseAndValidateArgs(args);
       const url = new URL(validatedArgs.action.url);
       
       return {
@@ -183,17 +209,7 @@ export class UseSecretTool {
         domain: url.hostname
       };
     } catch (validationError) {
-      const rawArgs = args as any;
-      await this.auditRequest(
-        {
-          secretId: rawArgs?.secretId,
-          action: rawArgs?.action?.type,
-          domain: undefined
-        },
-        TEXT.AUDIT_OUTCOME_DENIED,
-        TEXT.ERROR_INVALID_REQUEST
-      );
-      throw validationError;
+      return await this.handleValidationFailure(args, validationError);
     }
   }
 
@@ -212,7 +228,7 @@ export class UseSecretTool {
       );
       
       writeError(TEXT.ERROR_RATE_LIMITED, {
-        level: 'WARN',
+        level: CONFIG.LOG_LEVEL_WARN,
         code: CONFIG.ERROR_CODE_RATE_LIMITED,
         secretId,
         domain
@@ -243,23 +259,42 @@ export class UseSecretTool {
   }
 
   /**
+   * Checks policy access and handles denial
+   */
+  private async checkPolicyAccess(secretId: string, action: string, domain: string): Promise<void> {
+    const accessDecision = this.policyProvider.evaluate(secretId, action, domain);
+    
+    if (!accessDecision.allowed) {
+      await this.auditRequest(
+        { secretId, action, domain },
+        TEXT.AUDIT_OUTCOME_DENIED,
+        accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION
+      );
+      
+      const errorCode = accessDecision.code || CONFIG.ERROR_CODE_FORBIDDEN_ACTION;
+      const errorMessage = accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION;
+      throw new ToolError(errorMessage, errorCode);
+    }
+  }
+
+  /**
+   * Handles unexpected policy evaluation errors
+   */
+  private async handlePolicyError(policyError: unknown, secretId: string, action: string, domain: string): Promise<void> {
+    await this.auditRequest(
+      { secretId, action, domain },
+      TEXT.AUDIT_OUTCOME_ERROR,
+      policyError instanceof Error ? policyError.message : TEXT.ERROR_EXECUTION_FAILED
+    );
+    throw new ToolError(TEXT.ERROR_EXECUTION_FAILED, CONFIG.ERROR_CODE_EXECUTION_FAILED);
+  }
+
+  /**
    * Evaluates access policy for the request
    */
   private async evaluateAccessPolicy(secretId: string, action: string, domain: string): Promise<void> {
     try {
-      const accessDecision = this.policyProvider.evaluate(secretId, action, domain);
-      
-      if (!accessDecision.allowed) {
-        await this.auditRequest(
-          { secretId, action, domain },
-          TEXT.AUDIT_OUTCOME_DENIED,
-          accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION
-        );
-        
-        const errorCode = accessDecision.code || CONFIG.ERROR_CODE_FORBIDDEN_ACTION;
-        const errorMessage = accessDecision.message || TEXT.ERROR_FORBIDDEN_ACTION;
-        throw new ToolError(errorMessage, errorCode);
-      }
+      await this.checkPolicyAccess(secretId, action, domain);
     } catch (policyError) {
       // If it's already a ToolError from the denied case above, rethrow it
       if (policyError instanceof ToolError) {
@@ -267,12 +302,7 @@ export class UseSecretTool {
       }
       
       // For unexpected policy evaluation errors
-      await this.auditRequest(
-        { secretId, action, domain },
-        TEXT.AUDIT_OUTCOME_ERROR,
-        policyError instanceof Error ? policyError.message : TEXT.ERROR_EXECUTION_FAILED
-      );
-      throw new ToolError(TEXT.ERROR_EXECUTION_FAILED, CONFIG.ERROR_CODE_EXECUTION_FAILED);
+      await this.handlePolicyError(policyError, secretId, action, domain);
     }
   }
 
@@ -296,6 +326,41 @@ export class UseSecretTool {
   }
 
   /**
+   * Performs the actual secret action execution
+   */
+  private async performSecretAction(
+    action: UseSecretArgs['action'],
+    secretValue: string
+  ): Promise<unknown> {
+    return await this.actionExecutor.execute({
+      method: action.type === TEXT.HTTP_METHOD_GET ? TEXT.HTTP_VERB_GET : TEXT.HTTP_VERB_POST,
+      url: action.url,
+      headers: action.headers,
+      body: action.body,
+      secretValue,
+      injectionType: action.injectionType || TEXT.INJECTION_TYPE_BEARER
+    });
+  }
+
+  /**
+   * Handles action execution errors with audit logging
+   */
+  private async handleActionError(
+    executorError: unknown,
+    context: AuditContext
+  ): Promise<never> {
+    await this.auditRequest(
+      context,
+      TEXT.AUDIT_OUTCOME_ERROR,
+      executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR
+    );
+    throw new AuditedError(
+      executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR,
+      executorError
+    );
+  }
+
+  /**
    * Executes the secret action and handles success/error auditing
    */
   private async executeSecretAction(
@@ -304,28 +369,78 @@ export class UseSecretTool {
     context: AuditContext
   ): Promise<unknown> {
     try {
-      const result = await this.actionExecutor.execute({
-        method: action.type === TEXT.HTTP_METHOD_GET ? TEXT.HTTP_VERB_GET : TEXT.HTTP_VERB_POST,
-        url: action.url,
-        headers: action.headers,
-        body: action.body,
-        secretValue,
-        injectionType: action.injectionType || TEXT.INJECTION_TYPE_BEARER
-      });
-      
+      const result = await this.performSecretAction(action, secretValue);
       await this.auditRequest(context, TEXT.AUDIT_OUTCOME_SUCCESS, TEXT.SUCCESS_REQUEST_COMPLETED);
       return result;
     } catch (executorError) {
-      await this.auditRequest(
-        context,
-        TEXT.AUDIT_OUTCOME_ERROR,
-        executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR
-      );
-      throw new AuditedError(
-        executorError instanceof Error ? executorError.message : TEXT.ERROR_NETWORK_ERROR,
-        executorError
-      );
+      return await this.handleActionError(executorError, context);
     }
+  }
+
+  /**
+   * Handles ToolError instances
+   */
+  private handleToolError(error: ToolError, context: Partial<AuditContext>): UseSecretResponse {
+    writeError(error.message, {
+      level: CONFIG.LOG_LEVEL_ERROR,
+      code: error.code,
+      secretId: context.secretId,
+      domain: context.domain
+    });
+    return { success: false, error: error.message, code: error.code };
+  }
+
+  /**
+   * Handles AuditedError instances (errors that already have audit entries)
+   */
+  private handleAuditedError(error: AuditedError, context: Partial<AuditContext>): UseSecretResponse {
+    const errorMessage = error.message;
+    writeError(errorMessage, { 
+      level: CONFIG.LOG_LEVEL_ERROR, 
+      code: CONFIG.ERROR_CODE_EXECUTION_FAILED,
+      secretId: context.secretId,
+      domain: context.domain
+    });
+    return { success: false, error: errorMessage, code: CONFIG.ERROR_CODE_EXECUTION_FAILED };
+  }
+
+  /**
+   * Handles ZodError instances with specific error type detection
+   */
+  private handleZodError(error: z.ZodError): UseSecretResponse {
+    const hasInvalidUrl = error.errors.some(e => e.message === TEXT.ERROR_INVALID_URL);
+    const hasEmptyHeader = error.errors.some(e => e.message === TEXT.ERROR_EMPTY_HEADER_NAME);
+    const hasInvalidActionType = error.errors.some(e => 
+      e.path.includes(TEXT.FIELD_ACTION) && e.path.includes(TEXT.FIELD_TYPE)
+    );
+    const hasInvalidInjectionType = error.errors.some(e => 
+      e.path.includes(TEXT.FIELD_ACTION) && e.path.includes(TEXT.FIELD_INJECTION_TYPE_LOWER)
+    );
+    
+    const errorMessage = hasInvalidUrl ? TEXT.ERROR_INVALID_URL
+      : hasEmptyHeader ? TEXT.ERROR_EMPTY_HEADER_NAME
+      : hasInvalidActionType ? TEXT.ERROR_INVALID_METHOD
+      : hasInvalidInjectionType ? TEXT.ERROR_INVALID_INJECTION_TYPE
+      : TEXT.ERROR_INVALID_REQUEST;
+    const errorCode = hasInvalidUrl ? CONFIG.ERROR_CODE_INVALID_URL
+      : hasEmptyHeader ? CONFIG.ERROR_CODE_INVALID_HEADERS
+      : hasInvalidActionType ? CONFIG.ERROR_CODE_INVALID_METHOD
+      : hasInvalidInjectionType ? CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE
+      : CONFIG.ERROR_CODE_INVALID_REQUEST;
+    
+    writeError(errorMessage, { level: CONFIG.LOG_LEVEL_ERROR, code: errorCode, details: error.errors });
+    return { success: false, error: errorMessage, code: errorCode };
+  }
+
+  /**
+   * Handles generic errors with audit logging
+   */
+  private async handleGenericError(error: unknown, context: Partial<AuditContext>): Promise<UseSecretResponse> {
+    await this.auditRequest(context, TEXT.AUDIT_OUTCOME_ERROR, TEXT.ERROR_EXECUTION_FAILED);
+    
+    const errorMessage = error instanceof Error ? error.message : TEXT.ERROR_EXECUTION_FAILED;
+    writeError(errorMessage, { level: CONFIG.LOG_LEVEL_ERROR, code: CONFIG.ERROR_CODE_EXECUTION_FAILED });
+    return { success: false, error: errorMessage, code: CONFIG.ERROR_CODE_EXECUTION_FAILED };
   }
 
   /**
@@ -336,57 +451,18 @@ export class UseSecretTool {
     context: Partial<AuditContext>
   ): Promise<UseSecretResponse> {
     if (error instanceof ToolError) {
-      writeError(error.message, {
-        level: 'ERROR',
-        code: error.code,
-        secretId: context.secretId,
-        domain: context.domain
-      });
-      return { success: false, error: error.message, code: error.code };
+      return this.handleToolError(error, context);
     }
     
     if (error instanceof AuditedError) {
-      // Audit has already been written in executeSecretAction, just handle the error response
-      const errorMessage = error.message;
-      writeError(errorMessage, { 
-        level: 'ERROR', 
-        code: CONFIG.ERROR_CODE_EXECUTION_FAILED,
-        secretId: context.secretId,
-        domain: context.domain
-      });
-      return { success: false, error: errorMessage, code: CONFIG.ERROR_CODE_EXECUTION_FAILED };
+      return this.handleAuditedError(error, context);
     }
     
     if (error instanceof z.ZodError) {
-      const hasInvalidUrl = error.errors.some(e => e.message === TEXT.ERROR_INVALID_URL);
-      const hasEmptyHeader = error.errors.some(e => e.message === TEXT.ERROR_EMPTY_HEADER_NAME);
-      const hasInvalidActionType = error.errors.some(e => 
-        e.path.includes('action') && e.path.includes('type')
-      );
-      const hasInvalidInjectionType = error.errors.some(e => 
-        e.path.includes('action') && e.path.includes('injectionType')
-      );
-      
-      const errorMessage = hasInvalidUrl ? TEXT.ERROR_INVALID_URL
-        : hasEmptyHeader ? TEXT.ERROR_EMPTY_HEADER_NAME
-        : hasInvalidActionType ? TEXT.ERROR_INVALID_METHOD
-        : hasInvalidInjectionType ? TEXT.ERROR_INVALID_INJECTION_TYPE
-        : TEXT.ERROR_INVALID_REQUEST;
-      const errorCode = hasInvalidUrl ? CONFIG.ERROR_CODE_INVALID_URL
-        : hasEmptyHeader ? CONFIG.ERROR_CODE_INVALID_HEADERS
-        : hasInvalidActionType ? CONFIG.ERROR_CODE_INVALID_METHOD
-        : hasInvalidInjectionType ? CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE
-        : CONFIG.ERROR_CODE_INVALID_REQUEST;
-      
-      writeError(errorMessage, { level: 'ERROR', code: errorCode, details: error.errors });
-      return { success: false, error: errorMessage, code: errorCode };
+      return this.handleZodError(error);
     }
     
-    await this.auditRequest(context, TEXT.AUDIT_OUTCOME_ERROR, TEXT.ERROR_EXECUTION_FAILED);
-    
-    const errorMessage = error instanceof Error ? error.message : TEXT.ERROR_EXECUTION_FAILED;
-    writeError(errorMessage, { level: 'ERROR', code: CONFIG.ERROR_CODE_EXECUTION_FAILED });
-    return { success: false, error: errorMessage, code: CONFIG.ERROR_CODE_EXECUTION_FAILED };
+    return await this.handleGenericError(error, context);
   }
 
   /**
