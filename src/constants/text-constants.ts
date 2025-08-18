@@ -109,7 +109,19 @@ export const TEXT = {
   TOOL_DESC_DESCRIBE: 'Get policy details for a secret',
   TOOL_DESC_USE: 'Use a secret to perform an action',
   TOOL_DESC_AUDIT: 'Query audit log entries',
-  TOOL_DISCOVER_DESCRIPTION: 'List all available secret identifiers and their metadata'
+  TOOL_DISCOVER_DESCRIPTION: 'List all available secret identifiers and their metadata',
+  
+  // Input field descriptions
+  INPUT_DESC_SECRET_ID: 'The ID of the secret to describe policy for',
+  
+  // Schema types
+  SCHEMA_TYPE_OBJECT: 'object',
+  SCHEMA_TYPE_STRING: 'string',
+  
+  // Schema field names (JSON Schema standard keywords)
+  SCHEMA_PROPERTIES: 'properties',
+  SCHEMA_REQUIRED: 'required',
+  SCHEMA_TYPE: 'type'
 } as const;
 
 export type TextKey = keyof typeof TEXT;

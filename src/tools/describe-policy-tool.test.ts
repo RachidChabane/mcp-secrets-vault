@@ -3,7 +3,7 @@ import { DescribePolicyTool } from './describe-policy-tool.js';
 import { PolicyProvider, PolicyConfig } from '../interfaces/policy.interface.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
-import { VaultError } from '../utils/errors.js';
+import { VaultError, ValidationError } from '../utils/errors.js';
 
 describe('DescribePolicyTool', () => {
   let mockPolicyProvider: PolicyProvider;
@@ -26,14 +26,14 @@ describe('DescribePolicyTool', () => {
       expect(toolDef.name).toBe(TEXT.TOOL_DESCRIBE);
       expect(toolDef.description).toBe(TEXT.TOOL_DESC_DESCRIBE);
       expect(toolDef.inputSchema).toEqual({
-        type: 'object',
-        properties: {
-          secretId: {
-            type: 'string',
-            description: 'The ID of the secret to describe policy for'
+        [TEXT.SCHEMA_TYPE]: TEXT.SCHEMA_TYPE_OBJECT,
+        [TEXT.SCHEMA_PROPERTIES]: {
+          [TEXT.FIELD_SECRET_ID]: {
+            [TEXT.SCHEMA_TYPE]: TEXT.SCHEMA_TYPE_STRING,
+            [TEXT.FIELD_DESCRIPTION]: TEXT.INPUT_DESC_SECRET_ID
           }
         },
-        required: ['secretId']
+        [TEXT.SCHEMA_REQUIRED]: [TEXT.FIELD_SECRET_ID]
       });
     });
   });
@@ -53,7 +53,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       
       expect(result).toEqual({
         [TEXT.FIELD_SECRET_ID]: 'test_secret',
@@ -78,7 +78,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'minimal_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'minimal_secret' });
       
       expect(result).toEqual({
         [TEXT.FIELD_SECRET_ID]: 'minimal_secret',
@@ -90,14 +90,14 @@ describe('DescribePolicyTool', () => {
       expect(TEXT.FIELD_EXPIRES_AT in result).toBe(false);
     });
 
-    it('throws error when policy does not exist', async () => {
+    it('throws VaultError when policy does not exist', async () => {
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(undefined);
       
-      await expect(tool.execute({ secretId: 'unknown_secret' }))
+      await expect(tool.execute({ [TEXT.FIELD_SECRET_ID]: 'unknown_secret' }))
         .rejects.toThrow(VaultError);
       
       try {
-        await tool.execute({ secretId: 'unknown_secret' });
+        await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'unknown_secret' });
       } catch (error) {
         expect(error).toBeInstanceOf(VaultError);
         const vaultError = error as VaultError;
@@ -116,35 +116,90 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: '  test_secret  ' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: '  test_secret  ' });
       
       expect(vi.mocked(mockPolicyProvider.getPolicy)).toHaveBeenCalledWith('test_secret');
       expect(result[TEXT.FIELD_SECRET_ID]).toBe('test_secret');
     });
 
-    it('rejects invalid secretId format', async () => {
-      await expect(tool.execute({ secretId: 'invalid-format!' }))
-        .rejects.toThrow();
-      
-      await expect(tool.execute({ secretId: '' }))
-        .rejects.toThrow();
-      
-      await expect(tool.execute({ secretId: 'a' }))
-        .rejects.toThrow();
-      
-      await expect(tool.execute({ secretId: 'a'.repeat(CONFIG.MAX_SECRET_ID_LENGTH + 1) }))
-        .rejects.toThrow();
-    });
+    describe('input validation errors', () => {
+      it('throws ValidationError for invalid secretId format', async () => {
+        try {
+          await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'invalid-format!' });
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(ValidationError);
+          const validationError = error as ValidationError;
+          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+          expect(validationError.context).toEqual({ field: TEXT.FIELD_SECRET_ID });
+        }
+      });
 
-    it('rejects missing secretId', async () => {
-      await expect(tool.execute({}))
-        .rejects.toThrow();
-      
-      await expect(tool.execute(null))
-        .rejects.toThrow();
-      
-      await expect(tool.execute(undefined))
-        .rejects.toThrow();
+      it('throws ValidationError for empty secretId', async () => {
+        try {
+          await tool.execute({ [TEXT.FIELD_SECRET_ID]: '' });
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(ValidationError);
+          const validationError = error as ValidationError;
+          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+          expect(validationError.context).toEqual({ field: TEXT.FIELD_SECRET_ID });
+        }
+      });
+
+      it('throws ValidationError for too long secretId', async () => {
+        try {
+          await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'a'.repeat(CONFIG.MAX_SECRET_ID_LENGTH + 1) });
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(ValidationError);
+          const validationError = error as ValidationError;
+          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+          expect(validationError.context).toEqual({ field: TEXT.FIELD_SECRET_ID });
+        }
+      });
+
+      it('throws ValidationError for missing secretId', async () => {
+        try {
+          await tool.execute({});
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(ValidationError);
+          const validationError = error as ValidationError;
+          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+          expect(validationError.context?.['field']).toBeDefined();
+        }
+      });
+
+      it('throws ValidationError for null input', async () => {
+        try {
+          await tool.execute(null);
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(ValidationError);
+          const validationError = error as ValidationError;
+          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+          expect(validationError.context?.['field']).toBeDefined();
+        }
+      });
+
+      it('throws ValidationError for undefined input', async () => {
+        try {
+          await tool.execute(undefined);
+          expect.fail('Should have thrown');
+        } catch (error) {
+          expect(error).toBeInstanceOf(ValidationError);
+          const validationError = error as ValidationError;
+          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+          expect(validationError.context?.['field']).toBeDefined();
+        }
+      });
     });
 
     it('ensures arrays in response are frozen', async () => {
@@ -156,7 +211,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       
       expect(Object.isFrozen(result[TEXT.FIELD_ALLOWED_ACTIONS])).toBe(true);
       expect(Object.isFrozen(result[TEXT.FIELD_ALLOWED_DOMAINS])).toBe(true);
@@ -175,7 +230,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       
       expect(Object.isFrozen(result[TEXT.FIELD_RATE_LIMIT])).toBe(true);
     });
@@ -190,7 +245,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       
       expect('envVar' in result).toBe(false);
       expect(TEXT.FIELD_ENV_VAR in result).toBe(false);
@@ -206,7 +261,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       
       expect(result[TEXT.FIELD_ALLOWED_ACTIONS]).toEqual([]);
       expect(result[TEXT.FIELD_ALLOWED_DOMAINS]).toEqual([]);
@@ -221,7 +276,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       
       expect(result[TEXT.FIELD_ALLOWED_ACTIONS]).toEqual(['http_post', 'http_get']);
       expect(result[TEXT.FIELD_ALLOWED_DOMAINS]).toEqual(['zulu.example.com', 'alpha.example.com', 'mike.example.com']);
@@ -238,7 +293,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       const resultStr = JSON.stringify(result);
       
       expect(resultStr).not.toContain('envVar');
@@ -259,7 +314,7 @@ describe('DescribePolicyTool', () => {
       
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(mockPolicy);
       
-      const result = await tool.execute({ secretId: 'test_secret' });
+      const result = await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'test_secret' });
       
       expect(Object.isFrozen(result)).toBe(true);
       expect(Object.isFrozen(result[TEXT.FIELD_ALLOWED_ACTIONS])).toBe(true);
@@ -272,6 +327,20 @@ describe('DescribePolicyTool', () => {
         mutableResult.newField = 'test';
       }).toThrow();
       expect(mutableResult.newField).toBeUndefined();
+    });
+
+    it('validation errors never expose input values', async () => {
+      const secretValue = 'my-secret-value-12345!@#$%';
+      
+      try {
+        await tool.execute({ [TEXT.FIELD_SECRET_ID]: secretValue });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ValidationError);
+        const errorJson = JSON.stringify(error);
+        expect(errorJson).not.toContain(secretValue);
+        expect(errorJson).toContain(TEXT.FIELD_SECRET_ID);
+      }
     });
   });
 });
