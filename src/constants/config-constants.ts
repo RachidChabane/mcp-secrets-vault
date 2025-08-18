@@ -118,7 +118,17 @@ export const CONFIG = {
   EXIT_CODE_MISSING_DEPENDENCY: 3,
   
   // File system error codes
-  FS_ERROR_ENOENT: 'ENOENT'
+  FS_ERROR_ENOENT: 'ENOENT',
+  
+  // Unit conversion constants
+  BYTES_PER_MB: 1024 * 1024,
+  MS_PER_DAY: 24 * 60 * 60 * 1000,
+  
+  // Numeric defaults
+  ZERO_COUNT: 0,
+  
+  // Line ending pattern
+  LINE_ENDING_PATTERN: /\r?\n/
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG;
