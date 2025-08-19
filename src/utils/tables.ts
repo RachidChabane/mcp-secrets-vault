@@ -1,5 +1,6 @@
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
+import { deepFreeze } from './security.js';
 
 // Response type for tool responses
 interface ToolResponse {
@@ -135,15 +136,17 @@ export const LOG_LEVEL_MAP = {
   debug: CONFIG.LOG_LEVEL_DEBUG,
 } as const;
 
-// One-liner response helper
+// One-liner response helper with sanitization
 export function respondByCode(code: string): ToolResponse {
   const response = RESPONSE_BY_CODE[code] || RESPONSE_BY_CODE[CONFIG.ERROR_CODE_EXECUTION_FAILED];
   // Response should always exist due to fallback, but TypeScript doesn't know that
   const message = response?.message || TEXT.ERROR_EXECUTION_FAILED;
   const responseCode = response?.code || CONFIG.ERROR_CODE_EXECUTION_FAILED;
-  return {
+  
+  // Return immutable sanitized response
+  return deepFreeze({
     success: false,
     error: message,
     code: responseCode
-  };
+  });
 }

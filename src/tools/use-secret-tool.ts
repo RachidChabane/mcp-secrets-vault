@@ -13,6 +13,7 @@ import { writeError } from '../utils/logging.js';
 import { z } from 'zod';
 import { mapZodErrorToToolError } from '../utils/zod-mapper.js';
 import { respondByCode, HTTP_METHOD_MAP, INJECTION_HANDLERS, RESPONSE_BY_CODE } from '../utils/tables.js';
+import { sanitizeResponse } from '../utils/security.js';
 
 const UseSecretSchema = z.object({
   secretId: z.string().min(1).transform(s => s.trim()),
@@ -480,7 +481,8 @@ export class UseSecretTool {
         context as AuditContext
       );
       
-      return { success: true, result };
+      // Sanitize and make response immutable
+      return sanitizeResponse({ success: true, result });
     } catch (error) {
       return this.handleExecutionError(error, context);
     }

@@ -32,22 +32,68 @@ export const CONFIG = {
   RESPONSE_MAX_BODY_LENGTH: 10000,
   RESPONSE_TRUNCATION_MESSAGE: '... [truncated]',
   
-  // Sanitization
+  // Sanitization - Comprehensive patterns for defense in depth
   SANITIZE_AUTH_HEADER_PATTERN: /authorization/i,
-  SANITIZE_SECRET_PATTERN: /(api[_-]?key|secret|token|password|auth|bearer)/i,
+  SANITIZE_SECRET_PATTERN: /(api[_-]?key|secret|token|password|auth|bearer|credential|private[_-]?key|access[_-]?key)/i,
   SANITIZE_REPLACEMENT: '[REDACTED]',
+  
+  // Additional redaction patterns for security hardening
+  REDACT_URL_AUTH_PATTERN: /https?:\/\/[^:]+:[^@]+@[^\s]+/gi,
+  REDACT_JWT_PATTERN: /eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g,
+  REDACT_BEARER_TOKEN_PATTERN: /bearer\s+[a-zA-Z0-9\-._~+\/]+=*/gi,
+  REDACT_API_KEY_PATTERNS: [
+    /\b[a-zA-Z0-9]{32,}\b/g,  // Generic long tokens
+    /sk[-_]test[-_][a-zA-Z0-9]{24,}/gi,  // Stripe test keys
+    /sk[-_]live[-_][a-zA-Z0-9]{24,}/gi,  // Stripe live keys
+    /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi,  // UUIDs
+    /ghp_[a-zA-Z0-9]{36}/g,  // GitHub personal access tokens
+    /gho_[a-zA-Z0-9]{36}/g,  // GitHub OAuth tokens
+  ],
+  REDACT_ENV_VAR_PATTERN: /\b[A-Z][A-Z0-9_]*_(KEY|SECRET|TOKEN|PASSWORD|API|CREDENTIAL)\b/gi,
+  REDACT_KEY_VALUE_PATTERN: /(api[_-]?key|secret|token|password|auth|bearer|credential|private[_-]?key)\s*[:=]\s*[^\s,;}]+/gi,
+  
+  // Sensitive field names to always redact
+  SENSITIVE_FIELD_NAMES: [
+    'envvar',
+    'env',
+    'secret',
+    'password',
+    'token',
+    'auth',
+    'authorization',
+    'bearer',
+    'apikey',
+    'api_key',
+    'api-key',
+    'secretvalue',
+    'secret_value',
+    'credential',
+    'credentials',
+    'private_key',
+    'privatekey',
+    'access_key',
+    'accesskey',
+    'client_secret',
+    'clientsecret'
+  ],
   
   // Validation
   MAX_SECRET_ID_LENGTH: 100,
   MAX_DOMAIN_LENGTH: 253,
   MAX_ACTION_LENGTH: 50,
   MAX_REASON_LENGTH: 500,
+  MAX_URL_LENGTH: 2048,
+  MAX_HEADER_NAME_LENGTH: 100,
+  MAX_HEADER_VALUE_LENGTH: 8192,
   SECRET_ID_REGEX: /^[a-zA-Z0-9_-]+$/,
   ENV_VAR_REGEX: /^[A-Z][A-Z0-9_]*$/,
   MIN_SECRET_ID_LENGTH: 1,
   MIN_ENV_VAR_LENGTH: 1,
+  MIN_DOMAIN_LENGTH: 3,
   DOMAIN_REGEX: /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i,
   ACTION_REGEX: /^[a-z_]+$/,
+  URL_REGEX: /^https?:\/\/([\w\-]+\.)+[\w\-]+(\/[\w\-._~:/?#[\]@!$&'()*+,;=]*)?$/,
+  HEADER_NAME_REGEX: /^[a-zA-Z0-9\-_]+$/,
   
   // File paths
   DEFAULT_CONFIG_FILE: 'vault.config.json',
@@ -124,6 +170,15 @@ export const CONFIG = {
   // Default values
   DEFAULT_TIMEZONE: 'UTC',
   DEFAULT_ENCODING: 'utf-8',
+  
+  // Security defaults (deny-by-default posture)
+  DEFAULT_ALLOW_DOMAINS: [] as readonly string[],
+  DEFAULT_ALLOW_ACTIONS: [] as readonly string[],
+  DEFAULT_MAX_REQUEST_SIZE: 1024 * 1024, // 1MB
+  DEFAULT_REQUIRE_HTTPS: true,
+  DEFAULT_ALLOW_REDIRECTS: false,
+  DEFAULT_SANITIZE_RESPONSES: true,
+  DEFAULT_AUDIT_ALL_REQUESTS: true,
   
   // Environment variable prefix
   ENV_PREFIX: 'MCP_VAULT_',

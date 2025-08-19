@@ -42,6 +42,17 @@ export const TEXT = {
   ERROR_INVALID_URL: 'Invalid URL format',
   ERROR_INVALID_HEADERS: 'Invalid headers format',
   ERROR_EXECUTION_FAILED: 'Execution failed',
+  ERROR_DOMAIN_TOO_SHORT: 'Domain name is too short',
+  ERROR_DOMAIN_TOO_LONG: 'Domain name exceeds maximum length',
+  ERROR_INVALID_DOMAIN_FORMAT: 'Invalid domain format',
+  ERROR_URL_TOO_LONG: 'URL exceeds maximum length',
+  ERROR_HTTPS_REQUIRED: 'HTTPS is required for security',
+  ERROR_INVALID_URL_FORMAT: 'Invalid URL format',
+  ERROR_ACTION_TOO_LONG: 'Action exceeds maximum length',
+  ERROR_INVALID_ACTION_FORMAT: 'Invalid action format',
+  ERROR_HEADER_NAME_TOO_LONG: 'Header name exceeds maximum length',
+  ERROR_INVALID_HEADER_NAME_FORMAT: 'Invalid header name format',
+  ERROR_HEADER_VALUE_TOO_LONG: 'Header value exceeds maximum length',
   
   // Success messages
   SUCCESS_REQUEST_COMPLETED: 'Request completed successfully',
@@ -79,6 +90,8 @@ export const TEXT = {
   FIELD_ERROR: 'error',
   FIELD_CODE: 'code',
   FIELD_MESSAGE: 'message',
+  FIELD_HEADER_NAME: 'headerName',
+  FIELD_HEADER_VALUE: 'headerValue',
   
   // Log messages
   LOG_SERVER_STARTED: 'MCP server started',
