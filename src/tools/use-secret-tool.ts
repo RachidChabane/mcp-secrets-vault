@@ -212,8 +212,19 @@ export class UseSecretTool {
    * Enforces rate limiting for the request
    */
   private async enforceRateLimit(secretId: string, domain: string, action?: string): Promise<void> {
-    const rateLimitKey = `${secretId}:${domain}`;
-    const rateCheck = this.rateLimiter.checkLimit(rateLimitKey);
+    // Get policy to use per-secret rate limits
+    const policy = this.policyProvider.getPolicy(secretId);
+    
+    // Use secretId as rate limit key (per-secret, not per-domain)
+    const rateLimitKey = secretId;
+    
+    // Use policy rate limits if available, otherwise defaults
+    const limit = policy?.rateLimit?.requests;
+    const windowSeconds = policy?.rateLimit?.windowSeconds;
+    
+    const rateCheck = limit && windowSeconds
+      ? this.rateLimiter.checkLimit(rateLimitKey, limit, windowSeconds)
+      : this.rateLimiter.checkLimit(rateLimitKey);
     
     if (!rateCheck.allowed) {
       await this.auditRequest(
@@ -226,7 +237,8 @@ export class UseSecretTool {
         level: CONFIG.LOG_LEVEL_WARN,
         code: CONFIG.ERROR_CODE_RATE_LIMITED,
         secretId,
-        domain
+        domain,
+        resetAt: new Date(rateCheck.resetAt).toISOString()
       });
       
       throw new ToolError(TEXT.ERROR_RATE_LIMITED, CONFIG.ERROR_CODE_RATE_LIMITED);

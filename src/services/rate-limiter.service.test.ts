@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { RateLimiterService } from './rate-limiter.service.js';
 import { CONFIG } from '../constants/config-constants.js';
+import { TEXT } from '../constants/text-constants.js';
+import { ToolError } from '../utils/errors.js';
 
 describe('RateLimiterService', () => {
   let rateLimiter: RateLimiterService;
@@ -12,6 +14,9 @@ describe('RateLimiterService', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    if (rateLimiter) {
+      rateLimiter.shutdown();
+    }
   });
 
   describe('checkLimit', () => {
@@ -22,7 +27,46 @@ describe('RateLimiterService', () => {
         const result = rateLimiter.checkLimit(key);
         expect(result.allowed).toBe(true);
         expect(result.remaining).toBe(4 - i);
+        expect(Object.isFrozen(result)).toBe(true); // Check immutability
       }
+    });
+    
+    it('should trim input keys', () => {
+      const key = '  test-key  ';
+      const trimmedKey = 'test-key';
+      
+      // Make some requests with spaces
+      for (let i = 0; i < 3; i++) {
+        rateLimiter.checkLimit(key);
+      }
+      
+      // Should use same window for trimmed key
+      const result = rateLimiter.checkLimit(trimmedKey);
+      expect(result.allowed).toBe(true);
+      expect(result.remaining).toBe(1); // 5 - 3 - 1 = 1
+    });
+    
+    it('should throw error for invalid key', () => {
+      expect(() => rateLimiter.checkLimit('')).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit('   ')).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(null as any)).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(undefined as any)).toThrow(ToolError);
+    });
+    
+    it('should throw error for invalid limit', () => {
+      const key = 'test-key';
+      expect(() => rateLimiter.checkLimit(key, 0)).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(key, -1)).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(key, Infinity)).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(key, NaN)).toThrow(ToolError);
+    });
+    
+    it('should throw error for invalid window', () => {
+      const key = 'test-key';
+      expect(() => rateLimiter.checkLimit(key, 5, 0)).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(key, 5, -1)).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(key, 5, Infinity)).toThrow(ToolError);
+      expect(() => rateLimiter.checkLimit(key, 5, NaN)).toThrow(ToolError);
     });
 
     it('should deny requests exceeding limit', () => {
@@ -124,6 +168,30 @@ describe('RateLimiterService', () => {
       expect(result.allowed).toBe(true);
       expect(result.remaining).toBe(4);
     });
+    
+    it('should handle trimming in reset', () => {
+      const key = '  test-key  ';
+      const trimmedKey = 'test-key';
+      
+      // Exhaust limit
+      for (let i = 0; i < 5; i++) {
+        rateLimiter.checkLimit(trimmedKey);
+      }
+      
+      // Reset with spaces should work
+      rateLimiter.reset(key);
+      
+      // Should allow requests again
+      const result = rateLimiter.checkLimit(trimmedKey);
+      expect(result.allowed).toBe(true);
+    });
+    
+    it('should handle invalid keys gracefully', () => {
+      // Should not throw
+      expect(() => rateLimiter.reset('')).not.toThrow();
+      expect(() => rateLimiter.reset('  ')).not.toThrow();
+      expect(() => rateLimiter.reset(null as any)).not.toThrow();
+    });
   });
 
   describe('resetAll', () => {
@@ -190,6 +258,86 @@ describe('RateLimiterService', () => {
       // Next should be denied
       const result = defaultLimiter.checkLimit(key);
       expect(result.allowed).toBe(false);
+      
+      // Cleanup
+      defaultLimiter.shutdown();
+    });
+  });
+  
+  describe('getWindowCount', () => {
+    it('should return current request count in window', () => {
+      const key = 'test-key';
+      
+      expect(rateLimiter.getWindowCount(key)).toBe(0);
+      
+      rateLimiter.checkLimit(key);
+      expect(rateLimiter.getWindowCount(key)).toBe(1);
+      
+      rateLimiter.checkLimit(key);
+      expect(rateLimiter.getWindowCount(key)).toBe(2);
+    });
+    
+    it('should handle trimming', () => {
+      const key = '  test-key  ';
+      const trimmedKey = 'test-key';
+      
+      rateLimiter.checkLimit(trimmedKey);
+      rateLimiter.checkLimit(trimmedKey);
+      
+      expect(rateLimiter.getWindowCount(key)).toBe(2);
+    });
+    
+    it('should return 0 for invalid keys', () => {
+      expect(rateLimiter.getWindowCount('')).toBe(0);
+      expect(rateLimiter.getWindowCount('  ')).toBe(0);
+      expect(rateLimiter.getWindowCount(null as any)).toBe(0);
+    });
+    
+    it('should return 0 for non-existent keys', () => {
+      expect(rateLimiter.getWindowCount('nonexistent')).toBe(0);
+    });
+  });
+  
+  describe('shutdown', () => {
+    it('should stop cleanup timer', () => {
+      // The shutdown method should work without error
+      expect(() => rateLimiter.shutdown()).not.toThrow();
+      
+      // After shutdown, the limiter should still work (just without cleanup)
+      const key = 'test-after-shutdown';
+      const result = rateLimiter.checkLimit(key);
+      expect(result.allowed).toBe(true);
+    });
+  });
+  
+  describe('immutability', () => {
+    it('should return immutable results', () => {
+      const key = 'test-key';
+      const result = rateLimiter.checkLimit(key);
+      
+      expect(Object.isFrozen(result)).toBe(true);
+      expect(() => {
+        (result as any).allowed = false;
+      }).toThrow();
+    });
+  });
+  
+  describe('security', () => {
+    it('should never expose sensitive data in errors', () => {
+      const sensitiveKey = 'secret_api_key_12345';
+      
+      try {
+        rateLimiter.checkLimit('', 10, 60);
+      } catch (error: any) {
+        expect(error.message).not.toContain(sensitiveKey);
+        expect(error.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+      }
+      
+      try {
+        rateLimiter.checkLimit('key', 0);
+      } catch (error: any) {
+        expect(error.message).toBe(TEXT.ERROR_INVALID_RATE_LIMIT);
+      }
     });
   });
 });

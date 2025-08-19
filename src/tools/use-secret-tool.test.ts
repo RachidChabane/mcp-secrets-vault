@@ -3,6 +3,7 @@ import { UseSecretTool } from './use-secret-tool.js';
 import { SecretProvider } from '../interfaces/secret-provider.interface.js';
 import { SecretAccessor } from '../interfaces/secret-accessor.interface.js';
 import { PolicyProviderService } from '../services/policy-provider.service.js';
+import { EnvSecretProvider } from '../services/env-secret-provider.js';
 import { RateLimiterService } from '../services/rate-limiter.service.js';
 import type { IActionExecutor } from '../interfaces/action-executor.interface.js';
 import { JsonlAuditService } from '../services/audit-service.js';
@@ -284,6 +285,78 @@ describe('UseSecretTool', () => {
       expect(result.code).toBe('invalid_url');
     });
 
+    it('should enforce per-secret rate limits from policy', async () => {
+      // Set up environment variable for testing
+      process.env['TEST_RATE_ENV_VAR'] = 'test-secret-value';
+      
+      // Create a policy with a specific rate limit
+      const rateLimitPolicy = {
+        secretId: 'RATE_LIMITED_KEY',
+        allowedActions: ['http_get'],
+        allowedDomains: ['api.example.com'],
+        rateLimit: {
+          requests: 2,
+          windowSeconds: 60
+        }
+      };
+      
+      // Create mock policy provider that returns our test policy
+      const customPolicyProvider = {
+        async loadPolicies() {},
+        evaluate(secretId: string, action: string, domain: string) {
+          if (secretId === 'RATE_LIMITED_KEY' && 
+              action === 'http_get' && 
+              domain === 'api.example.com') {
+            return { allowed: true };
+          }
+          return { allowed: false, code: 'forbidden_domain', message: 'Domain not allowed' };
+        },
+        getPolicy(secretId: string) {
+          if (secretId === 'RATE_LIMITED_KEY') {
+            return rateLimitPolicy;
+          }
+          return undefined;
+        },
+        hasPolicy(secretId: string) {
+          return secretId === 'RATE_LIMITED_KEY';
+        }
+      };
+      
+      const customSecretProvider = new EnvSecretProvider([
+        { secretId: 'RATE_LIMITED_KEY', envVar: 'TEST_RATE_ENV_VAR' }
+      ]);
+      
+      const customTool = new UseSecretTool(
+        customSecretProvider,
+        customPolicyProvider as unknown as PolicyProviderService,
+        mockActionExecutor,
+        new RateLimiterService()
+      );
+      
+      const args = {
+        secretId: 'RATE_LIMITED_KEY',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
+      };
+      
+      // First two requests should succeed
+      for (let i = 0; i < 2; i++) {
+        const result = await customTool.execute(args);
+        expect(result.success).toBe(true);
+      }
+      
+      // Third request should be rate limited
+      const result = await customTool.execute(args);
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(TEXT.ERROR_RATE_LIMITED);
+      expect(result.code).toBe('rate_limited');
+      
+      // Clean up
+      delete process.env['TEST_RATE_ENV_VAR'];
+    });
+
     it('should handle POST request with headers and body', async () => {
       const args = {
         secretId: 'TEST_API_KEY',
@@ -437,7 +510,7 @@ describe('UseSecretTool', () => {
 
       await tool.execute(args);
 
-      expect(mockRateLimiter.checkLimit).toHaveBeenCalledWith('TEST_API_KEY:api.example.com');
+      expect(mockRateLimiter.checkLimit).toHaveBeenCalledWith('TEST_API_KEY');
     });
   });
 
