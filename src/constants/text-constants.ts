@@ -74,6 +74,7 @@ export const TEXT = {
   FIELD_SECRETS: 'secrets',
   FIELD_AVAILABLE: 'available',
   FIELD_DESCRIPTION: 'description',
+  FIELD_ENTRIES: 'entries',
   FIELD_ERROR: 'error',
   FIELD_CODE: 'code',
   FIELD_MESSAGE: 'message',
@@ -128,6 +129,7 @@ export const TEXT = {
   TOOL_DESC_USE: 'Use a secret to perform an action',
   TOOL_DESC_AUDIT: 'Query audit log entries',
   TOOL_DISCOVER_DESCRIPTION: 'List all available secret identifiers and their metadata',
+  TOOL_AUDIT_DESCRIPTION: 'Query audit log entries with filtering and pagination',
   
   // Input field descriptions
   INPUT_DESC_SECRET_ID: 'The ID of the secret to describe policy for',

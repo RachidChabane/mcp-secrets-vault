@@ -12,7 +12,9 @@ import { RateLimiterService } from './services/rate-limiter.service.js';
 import { DiscoverTool } from './tools/discover-tool.js';
 import { DescribePolicyTool } from './tools/describe-policy-tool.js';
 import { UseSecretTool } from './tools/use-secret-tool.js';
+import { QueryAuditTool } from './tools/query-audit-tool.js';
 import { SecretMapping } from './interfaces/secret-mapping.interface.js';
+import { JsonlAuditService } from './services/audit-service.js';
 import { writeError } from './utils/logging.js';
 import { ToolError } from './utils/errors.js';
 
@@ -83,7 +85,8 @@ async function executeTool(
   args: unknown,
   discoverTool: DiscoverTool,
   describePolicyTool: DescribePolicyTool,
-  useSecretTool: UseSecretTool
+  useSecretTool: UseSecretTool,
+  queryAuditTool: QueryAuditTool
 ): Promise<unknown> {
   switch (name) {
     case TEXT.TOOL_DISCOVER:
@@ -92,6 +95,8 @@ async function executeTool(
       return await describePolicyTool.execute(args);
     case TEXT.TOOL_USE:
       return await useSecretTool.execute(args);
+    case TEXT.TOOL_AUDIT:
+      return await queryAuditTool.execute(args);
     default:
       throw new ToolError(
         TEXT.ERROR_UNKNOWN_TOOL,
@@ -119,6 +124,10 @@ async function main(): Promise<void> {
   const policyProvider = new PolicyProviderService();
   const actionExecutor = new HttpActionExecutor();
   const rateLimiter = new RateLimiterService();
+  const auditService = new JsonlAuditService();
+  
+  // Initialize audit service
+  await auditService.initialize();
   
   // Load policies
   await policyProvider.loadPolicies();
@@ -127,6 +136,7 @@ async function main(): Promise<void> {
   const discoverTool = new DiscoverTool(secretProvider);
   const describePolicyTool = new DescribePolicyTool(policyProvider);
   const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+  const queryAuditTool = new QueryAuditTool(auditService);
   
   // Register tool listing handler
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -134,6 +144,7 @@ async function main(): Promise<void> {
       discoverTool.getTool(),
       describePolicyTool.getTool(),
       useSecretTool.getTool(),
+      queryAuditTool.getTool(),
     ],
   }));
 
@@ -142,7 +153,7 @@ async function main(): Promise<void> {
     const { name, arguments: args } = request.params;
     
     try {
-      const result = await executeTool(name, args, discoverTool, describePolicyTool, useSecretTool);
+      const result = await executeTool(name, args, discoverTool, describePolicyTool, useSecretTool, queryAuditTool);
       return createSuccessResponse(result);
     } catch (error) {
       return createErrorResponse(error, name);
@@ -164,6 +175,7 @@ async function main(): Promise<void> {
   // Handle shutdown signals
   const shutdown = async () => {
     writeError(TEXT.LOG_SERVER_STOPPED, { level: 'INFO' });
+    await auditService.close();
     await server.close();
     process.exit(CONFIG.EXIT_CODE_SUCCESS);
   };

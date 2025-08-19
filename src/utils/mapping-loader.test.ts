@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises';
 import { MappingLoader } from './mapping-loader.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
-import { ConfigurationError } from './errors.js';
+import { ToolError } from './errors.js';
 
 vi.mock('fs/promises');
 
@@ -65,14 +65,14 @@ describe('MappingLoader', () => {
       });
     });
 
-    it('should throw ConfigurationError for invalid JSON', async () => {
+    it('should throw ToolError for invalid JSON', async () => {
       vi.mocked(readFile).mockResolvedValue('invalid json{');
 
       await expect(loader.loadFromFile('mappings.json'))
-        .rejects.toThrow(ConfigurationError);
+        .rejects.toThrow(ToolError);
     });
 
-    it('should throw ConfigurationError for missing required fields', async () => {
+    it('should throw ToolError for missing required fields', async () => {
       const mockData = {
         mappings: [
           { secretId: 'api-key' }
@@ -82,10 +82,10 @@ describe('MappingLoader', () => {
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockData));
 
       await expect(loader.loadFromFile('mappings.json'))
-        .rejects.toThrow(ConfigurationError);
+        .rejects.toThrow(ToolError);
     });
 
-    it('should throw ConfigurationError for secretId too long', async () => {
+    it('should throw ToolError for secretId too long', async () => {
       const mockData = {
         mappings: [
           { secretId: 'a'.repeat(CONFIG.MAX_SECRET_ID_LENGTH + 1), envVar: 'API_KEY' }
@@ -95,10 +95,10 @@ describe('MappingLoader', () => {
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockData));
 
       await expect(loader.loadFromFile('mappings.json'))
-        .rejects.toThrow(ConfigurationError);
+        .rejects.toThrow(ToolError);
     });
 
-    it('should throw ConfigurationError for empty secretId', async () => {
+    it('should throw ToolError for empty secretId', async () => {
       const mockData = {
         mappings: [
           { secretId: '', envVar: 'API_KEY' }
@@ -108,10 +108,10 @@ describe('MappingLoader', () => {
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockData));
 
       await expect(loader.loadFromFile('mappings.json'))
-        .rejects.toThrow(ConfigurationError);
+        .rejects.toThrow(ToolError);
     });
 
-    it('should throw ConfigurationError for empty envVar', async () => {
+    it('should throw ToolError for empty envVar', async () => {
       const mockData = {
         mappings: [
           { secretId: 'api-key', envVar: '' }
@@ -121,7 +121,7 @@ describe('MappingLoader', () => {
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockData));
 
       await expect(loader.loadFromFile('mappings.json'))
-        .rejects.toThrow(ConfigurationError);
+        .rejects.toThrow(ToolError);
     });
 
     it('should handle empty mappings array', async () => {
@@ -143,8 +143,8 @@ describe('MappingLoader', () => {
         await loader.loadFromFile('mappings.json');
         expect.fail('Should have thrown');
       } catch (error) {
-        expect(error).toBeInstanceOf(ConfigurationError);
-        if (error instanceof ConfigurationError) {
+        expect(error).toBeInstanceOf(ToolError);
+        if (error instanceof ToolError) {
           expect(error.message).toBe(TEXT.ERROR_INVALID_CONFIG);
           expect(error.message).not.toContain('/path/to/secret');
         }
@@ -289,7 +289,7 @@ describe('MappingLoader', () => {
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockData));
 
       await expect(loader.loadFromFile('mappings.json'))
-        .rejects.toThrow(ConfigurationError);
+        .rejects.toThrow(ToolError);
     });
 
     it('should never expose ENV variable values in errors', () => {

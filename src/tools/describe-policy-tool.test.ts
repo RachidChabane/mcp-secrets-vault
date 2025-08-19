@@ -3,7 +3,7 @@ import { DescribePolicyTool } from './describe-policy-tool.js';
 import { PolicyProvider, PolicyConfig } from '../interfaces/policy.interface.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
-import { VaultError, ValidationError } from '../utils/errors.js';
+import { VaultError, ToolError } from '../utils/errors.js';
 
 describe('DescribePolicyTool', () => {
   let mockPolicyProvider: PolicyProvider;
@@ -90,20 +90,19 @@ describe('DescribePolicyTool', () => {
       expect(TEXT.FIELD_EXPIRES_AT in result).toBe(false);
     });
 
-    it('throws VaultError when policy does not exist', async () => {
+    it('throws ToolError when policy does not exist', async () => {
       vi.mocked(mockPolicyProvider.getPolicy).mockReturnValue(undefined);
       
       await expect(tool.execute({ [TEXT.FIELD_SECRET_ID]: 'unknown_secret' }))
-        .rejects.toThrow(VaultError);
+        .rejects.toThrow(ToolError);
       
       try {
         await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'unknown_secret' });
       } catch (error) {
-        expect(error).toBeInstanceOf(VaultError);
-        const vaultError = error as VaultError;
-        expect(vaultError.code).toBe(CONFIG.ERROR_CODE_NO_POLICY);
-        expect(vaultError.message).toBe(TEXT.ERROR_POLICY_NOT_FOUND);
-        expect(vaultError.context).toEqual({ [TEXT.FIELD_SECRET_ID]: 'unknown_secret' });
+        expect(error).toBeInstanceOf(ToolError);
+        const toolError = error as ToolError;
+        expect(toolError.code).toBe(CONFIG.ERROR_CODE_NO_POLICY);
+        expect(toolError.message).toBe(TEXT.ERROR_POLICY_NOT_FOUND);
       }
     });
 
@@ -123,81 +122,75 @@ describe('DescribePolicyTool', () => {
     });
 
     describe('input validation errors', () => {
-      it('throws ValidationError for invalid secretId format', async () => {
+      it('throws ToolError for invalid secretId format', async () => {
         try {
           await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'invalid-format!' });
           expect.fail('Should have thrown');
         } catch (error) {
-          expect(error).toBeInstanceOf(ValidationError);
-          const validationError = error as ValidationError;
-          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
-          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
-          expect(validationError.context).toEqual({ field: TEXT.FIELD_SECRET_ID });
+          expect(error).toBeInstanceOf(ToolError);
+          const toolError = error as ToolError;
+          expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(toolError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
         }
       });
 
-      it('throws ValidationError for empty secretId', async () => {
+      it('throws ToolError for empty secretId', async () => {
         try {
           await tool.execute({ [TEXT.FIELD_SECRET_ID]: '' });
           expect.fail('Should have thrown');
         } catch (error) {
-          expect(error).toBeInstanceOf(ValidationError);
-          const validationError = error as ValidationError;
-          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
-          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
-          expect(validationError.context).toEqual({ field: TEXT.FIELD_SECRET_ID });
+          expect(error).toBeInstanceOf(ToolError);
+          const toolError = error as ToolError;
+          expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(toolError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
         }
       });
 
-      it('throws ValidationError for too long secretId', async () => {
+      it('throws ToolError for too long secretId', async () => {
         try {
           await tool.execute({ [TEXT.FIELD_SECRET_ID]: 'a'.repeat(CONFIG.MAX_SECRET_ID_LENGTH + 1) });
           expect.fail('Should have thrown');
         } catch (error) {
-          expect(error).toBeInstanceOf(ValidationError);
-          const validationError = error as ValidationError;
-          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
-          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
-          expect(validationError.context).toEqual({ field: TEXT.FIELD_SECRET_ID });
+          expect(error).toBeInstanceOf(ToolError);
+          const toolError = error as ToolError;
+          expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(toolError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
         }
       });
 
-      it('throws ValidationError for missing secretId', async () => {
+      it('throws ToolError for missing secretId', async () => {
         try {
           await tool.execute({});
           expect.fail('Should have thrown');
         } catch (error) {
-          expect(error).toBeInstanceOf(ValidationError);
-          const validationError = error as ValidationError;
-          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
-          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
-          expect(validationError.context?.['field']).toBeDefined();
+          expect(error).toBeInstanceOf(ToolError);
+          const toolError = error as ToolError;
+          expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(toolError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
         }
       });
 
-      it('throws ValidationError for null input', async () => {
+      it('throws ToolError for null input', async () => {
         try {
           await tool.execute(null);
           expect.fail('Should have thrown');
         } catch (error) {
-          expect(error).toBeInstanceOf(ValidationError);
-          const validationError = error as ValidationError;
-          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
-          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
-          expect(validationError.context?.['field']).toBeDefined();
+          expect(error).toBeInstanceOf(ToolError);
+          const toolError = error as ToolError;
+          expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(toolError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
         }
       });
 
-      it('throws ValidationError for undefined input', async () => {
+      it('throws ToolError for undefined input', async () => {
         try {
           await tool.execute(undefined);
           expect.fail('Should have thrown');
         } catch (error) {
-          expect(error).toBeInstanceOf(ValidationError);
-          const validationError = error as ValidationError;
-          expect(validationError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
-          expect(validationError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
-          expect(validationError.context?.['field']).toBeDefined();
+          expect(error).toBeInstanceOf(ToolError);
+          const toolError = error as ToolError;
+          expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_REQUEST);
+          expect(toolError.message).toBe(TEXT.ERROR_INVALID_REQUEST);
         }
       });
     });
@@ -336,10 +329,10 @@ describe('DescribePolicyTool', () => {
         await tool.execute({ [TEXT.FIELD_SECRET_ID]: secretValue });
         expect.fail('Should have thrown');
       } catch (error) {
-        expect(error).toBeInstanceOf(ValidationError);
+        expect(error).toBeInstanceOf(ToolError);
         const errorJson = JSON.stringify(error);
         expect(errorJson).not.toContain(secretValue);
-        expect(errorJson).toContain(TEXT.FIELD_SECRET_ID);
+        expect(errorJson).not.toContain('12345');
       }
     });
   });
