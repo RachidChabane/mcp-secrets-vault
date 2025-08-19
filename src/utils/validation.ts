@@ -62,10 +62,8 @@ export function sanitizeForLog(value: string): string {
   return value.replace(CONFIG.SANITIZE_SECRET_PATTERN, CONFIG.SANITIZE_REPLACEMENT);
 }
 
-export function validateDomain(domain: string): string {
-  const trimmed = domain.trim().toLowerCase();
-  
-  if (trimmed.length < CONFIG.MIN_DOMAIN_LENGTH) {
+function validateDomainLength(domain: string): void {
+  if (domain.length < CONFIG.MIN_DOMAIN_LENGTH) {
     throw new ValidationError(
       CONFIG.ERROR_CODE_INVALID_REQUEST,
       TEXT.ERROR_DOMAIN_TOO_SHORT,
@@ -73,13 +71,19 @@ export function validateDomain(domain: string): string {
     );
   }
   
-  if (trimmed.length > CONFIG.MAX_DOMAIN_LENGTH) {
+  if (domain.length > CONFIG.MAX_DOMAIN_LENGTH) {
     throw new ValidationError(
       CONFIG.ERROR_CODE_INVALID_REQUEST,
       TEXT.ERROR_DOMAIN_TOO_LONG,
       TEXT.FIELD_DOMAIN
     );
   }
+}
+
+export function validateDomain(domain: string): string {
+  const trimmed = domain.trim().toLowerCase();
+  
+  validateDomainLength(trimmed);
   
   if (!CONFIG.DOMAIN_REGEX.test(trimmed)) {
     throw new ValidationError(
@@ -90,6 +94,29 @@ export function validateDomain(domain: string): string {
   }
   
   return trimmed;
+}
+
+function parseAndValidateUrl(url: string): URL {
+  let urlObj: URL;
+  try {
+    urlObj = new URL(url);
+  } catch {
+    throw new ValidationError(
+      CONFIG.ERROR_CODE_INVALID_REQUEST,
+      TEXT.ERROR_INVALID_URL,
+      TEXT.FIELD_URL
+    );
+  }
+  
+  if (CONFIG.DEFAULT_REQUIRE_HTTPS && urlObj.protocol !== 'https:') {
+    throw new ValidationError(
+      CONFIG.ERROR_CODE_INVALID_REQUEST,
+      TEXT.ERROR_HTTPS_REQUIRED,
+      TEXT.FIELD_URL
+    );
+  }
+  
+  return urlObj;
 }
 
 export function validateUrl(url: string): string {
@@ -103,28 +130,8 @@ export function validateUrl(url: string): string {
     );
   }
   
-  // Try to parse URL
-  let urlObj: URL;
-  try {
-    urlObj = new URL(trimmed);
-  } catch {
-    throw new ValidationError(
-      CONFIG.ERROR_CODE_INVALID_REQUEST,
-      TEXT.ERROR_INVALID_URL,
-      TEXT.FIELD_URL
-    );
-  }
+  const urlObj = parseAndValidateUrl(trimmed);
   
-  // Enforce HTTPS if required
-  if (CONFIG.DEFAULT_REQUIRE_HTTPS && urlObj.protocol !== 'https:') {
-    throw new ValidationError(
-      CONFIG.ERROR_CODE_INVALID_REQUEST,
-      TEXT.ERROR_HTTPS_REQUIRED,
-      TEXT.FIELD_URL
-    );
-  }
-  
-  // Validate against URL regex
   if (!CONFIG.URL_REGEX.test(trimmed)) {
     throw new ValidationError(
       CONFIG.ERROR_CODE_INVALID_REQUEST,
@@ -133,17 +140,14 @@ export function validateUrl(url: string): string {
     );
   }
   
-  // Strip authentication info for security
   urlObj.username = '';
   urlObj.password = '';
   
   return urlObj.toString();
 }
 
-export function validateAction(action: string): string {
-  const trimmed = action.trim().toLowerCase();
-  
-  if (trimmed.length > CONFIG.MAX_ACTION_LENGTH) {
+function validateActionFormat(action: string): void {
+  if (action.length > CONFIG.MAX_ACTION_LENGTH) {
     throw new ValidationError(
       CONFIG.ERROR_CODE_INVALID_REQUEST,
       TEXT.ERROR_ACTION_TOO_LONG,
@@ -151,15 +155,20 @@ export function validateAction(action: string): string {
     );
   }
   
-  if (!CONFIG.ACTION_REGEX.test(trimmed)) {
+  if (!CONFIG.ACTION_REGEX.test(action)) {
     throw new ValidationError(
       CONFIG.ERROR_CODE_INVALID_REQUEST,
       TEXT.ERROR_INVALID_ACTION_FORMAT,
       TEXT.FIELD_ACTION
     );
   }
+}
+
+export function validateAction(action: string): string {
+  const trimmed = action.trim().toLowerCase();
   
-  // Check if action is in supported list
+  validateActionFormat(trimmed);
+  
   if (!CONFIG.SUPPORTED_ACTIONS.includes(trimmed as any)) {
     throw new ValidationError(
       CONFIG.ERROR_CODE_FORBIDDEN_ACTION,

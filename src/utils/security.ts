@@ -18,63 +18,50 @@ export function truncateText(text: string, maxLength: number): string {
  * Comprehensive redaction of sensitive values from strings
  * Uses multiple patterns for defense in depth
  */
+/**
+ * Apply basic redaction patterns
+ */
+function applyBasicRedaction(text: string): string {
+  return text
+    .replace(CONFIG.REDACT_URL_AUTH_PATTERN, CONFIG.SANITIZE_REPLACEMENT)
+    .replace(CONFIG.REDACT_JWT_PATTERN, CONFIG.SANITIZE_REPLACEMENT)
+    .replace(CONFIG.REDACT_BEARER_TOKEN_PATTERN, CONFIG.SANITIZE_REPLACEMENT)
+    .replace(CONFIG.REDACT_ENV_VAR_PATTERN, CONFIG.SANITIZE_REPLACEMENT)
+    .replace(CONFIG.REDACT_KEY_VALUE_PATTERN, (_match, key) => `${key}=${CONFIG.SANITIZE_REPLACEMENT}`);
+}
+
+/**
+ * Apply API key pattern redaction
+ */
+function applyApiKeyRedaction(text: string): string {
+  let result = text;
+  for (const pattern of CONFIG.REDACT_API_KEY_PATTERNS) {
+    result = result.replace(pattern, CONFIG.SANITIZE_REPLACEMENT);
+  }
+  return result;
+}
+
+/**
+ * Apply token pattern redaction for long strings
+ */
+function applyTokenRedaction(text: string): string {
+  return text.replace(/\b[a-zA-Z0-9_-]{32,}\b/g, (match) => {
+    if (/^[a-zA-Z]+$/.test(match)) return match;
+    if (/[a-zA-Z]/.test(match) && /[0-9_-]/.test(match)) {
+      return CONFIG.SANITIZE_REPLACEMENT;
+    }
+    return match;
+  });
+}
+
 export function redactSensitiveValue(value: string): string {
   if (typeof value !== 'string') {
     return String(value);
   }
   
-  let redacted = value;
-  
-  // Redact URLs with authentication
-  redacted = redacted.replace(
-    CONFIG.REDACT_URL_AUTH_PATTERN,
-    CONFIG.SANITIZE_REPLACEMENT
-  );
-  
-  // Redact JWT tokens
-  redacted = redacted.replace(
-    CONFIG.REDACT_JWT_PATTERN,
-    CONFIG.SANITIZE_REPLACEMENT
-  );
-  
-  // Redact Bearer tokens
-  redacted = redacted.replace(
-    CONFIG.REDACT_BEARER_TOKEN_PATTERN,
-    CONFIG.SANITIZE_REPLACEMENT
-  );
-  
-  // Redact environment variable patterns
-  redacted = redacted.replace(
-    CONFIG.REDACT_ENV_VAR_PATTERN,
-    CONFIG.SANITIZE_REPLACEMENT
-  );
-  
-  // Redact key=value patterns with sensitive keys
-  redacted = redacted.replace(
-    CONFIG.REDACT_KEY_VALUE_PATTERN,
-    (_match, key) => `${key}=${CONFIG.SANITIZE_REPLACEMENT}`
-  );
-  
-  // Apply API key patterns
-  for (const pattern of CONFIG.REDACT_API_KEY_PATTERNS) {
-    redacted = redacted.replace(pattern, CONFIG.SANITIZE_REPLACEMENT);
-  }
-  
-  // Redact any remaining long alphanumeric tokens
-  redacted = redacted.replace(
-    /\b[a-zA-Z0-9_-]{32,}\b/g,
-    (match) => {
-      // Don't redact if it looks like a regular word
-      if (/^[a-zA-Z]+$/.test(match)) {
-        return match;
-      }
-      // Check if it contains mixed characters (likely a token)
-      if (/[a-zA-Z]/.test(match) && /[0-9_-]/.test(match)) {
-        return CONFIG.SANITIZE_REPLACEMENT;
-      }
-      return match;
-    }
-  );
+  let redacted = applyBasicRedaction(value);
+  redacted = applyApiKeyRedaction(redacted);
+  redacted = applyTokenRedaction(redacted);
   
   return redacted;
 }
@@ -117,13 +104,38 @@ export function sanitizeUrl(url: string): string {
  * Deep sanitize objects recursively
  * Ensures no sensitive data in nested structures
  */
-export function deepSanitizeObject<T>(obj: T, maxDepth: number = 10): T {
-  if (maxDepth <= 0) {
-    return CONFIG.SANITIZE_REPLACEMENT as unknown as T;
+/**
+ * Check if an object key is sensitive
+ */
+function isSensitiveKey(key: string): boolean {
+  const lowerKey = key.toLowerCase();
+  return CONFIG.SENSITIVE_FIELD_NAMES.some(sensitive => 
+    lowerKey === sensitive || lowerKey.includes(sensitive)
+  );
+}
+
+/**
+ * Sanitize object properties
+ */
+function sanitizeObjectProperties(obj: Record<string, unknown>, maxDepth: number): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  
+  for (const [key, value] of Object.entries(obj)) {
+    if (isSensitiveKey(key)) {
+      sanitized[key] = CONFIG.SANITIZE_REPLACEMENT;
+    } else if (key === 'url' && typeof value === 'string') {
+      sanitized[key] = sanitizeUrl(value);
+    } else {
+      sanitized[key] = deepSanitizeObject(value, maxDepth - 1);
+    }
   }
   
-  if (obj === null || obj === undefined) {
-    return obj;
+  return sanitized;
+}
+
+export function deepSanitizeObject<T>(obj: T, maxDepth: number = 10): T {
+  if (maxDepth <= 0 || obj === null || obj === undefined) {
+    return maxDepth <= 0 ? CONFIG.SANITIZE_REPLACEMENT as unknown as T : obj;
   }
   
   if (typeof obj === 'string') {
@@ -139,28 +151,9 @@ export function deepSanitizeObject<T>(obj: T, maxDepth: number = 10): T {
   }
   
   if (typeof obj === 'object') {
-    const sanitized: Record<string, unknown> = {};
-    
-    for (const [key, value] of Object.entries(obj)) {
-      const lowerKey = key.toLowerCase();
-      
-      // Check if key is sensitive
-      if (CONFIG.SENSITIVE_FIELD_NAMES.some(sensitive => 
-        lowerKey === sensitive || lowerKey.includes(sensitive)
-      )) {
-        sanitized[key] = CONFIG.SANITIZE_REPLACEMENT;
-      } else if (key === 'url' && typeof value === 'string') {
-        // Special handling for URL fields
-        sanitized[key] = sanitizeUrl(value);
-      } else {
-        sanitized[key] = deepSanitizeObject(value, maxDepth - 1);
-      }
-    }
-    
-    return sanitized as T;
+    return sanitizeObjectProperties(obj as Record<string, unknown>, maxDepth) as T;
   }
   
-  // For functions and other types, replace with placeholder
   return CONFIG.SANITIZE_REPLACEMENT as unknown as T;
 }
 
@@ -280,30 +273,60 @@ export function sanitizeResponse<T>(response: T): Readonly<T> {
  * Validate that an object contains no sensitive fields
  * Used for security invariant testing
  */
-export function containsSensitiveData(obj: unknown, path: string = ''): string[] {
+/**
+ * Check string for sensitive patterns
+ */
+function checkStringPatterns(text: string, path: string): string[] {
   const violations: string[] = [];
   
-  if (obj === null || obj === undefined) {
-    return violations;
+  if (CONFIG.REDACT_JWT_PATTERN.test(text)) {
+    violations.push(`${path}: Contains JWT token`);
+  }
+  if (CONFIG.REDACT_ENV_VAR_PATTERN.test(text)) {
+    violations.push(`${path}: Contains environment variable pattern`);
   }
   
+  const tokenMatch = text.match(/\b[a-zA-Z0-9_-]{32,}\b/);
+  if (tokenMatch && !/^[a-zA-Z]+$/.test(tokenMatch[0])) {
+    violations.push(`${path}: Contains potential secret token`);
+  }
+  
+  return violations;
+}
+
+/**
+ * Check object properties for sensitive fields
+ */
+function checkObjectProperties(obj: Record<string, unknown>, path: string): string[] {
+  const violations: string[] = [];
+  
+  for (const [key, value] of Object.entries(obj)) {
+    const lowerKey = key.toLowerCase();
+    const currentPath = path ? `${path}.${key}` : key;
+    
+    if (CONFIG.SENSITIVE_FIELD_NAMES.some(sensitive => 
+      lowerKey === sensitive || lowerKey.includes(sensitive)
+    )) {
+      if (value && value !== CONFIG.SANITIZE_REPLACEMENT) {
+        violations.push(`${currentPath}: Sensitive field not redacted`);
+      }
+    }
+    
+    violations.push(...containsSensitiveData(value, currentPath));
+  }
+  
+  return violations;
+}
+
+export function containsSensitiveData(obj: unknown, path: string = ''): string[] {
+  if (obj === null || obj === undefined) return [];
+  
   if (typeof obj === 'string') {
-    // Check for patterns that might indicate secrets
-    if (CONFIG.REDACT_JWT_PATTERN.test(obj)) {
-      violations.push(`${path}: Contains JWT token`);
-    }
-    if (CONFIG.REDACT_ENV_VAR_PATTERN.test(obj)) {
-      violations.push(`${path}: Contains environment variable pattern`);
-    }
-    // Check for long tokens
-    const tokenMatch = obj.match(/\b[a-zA-Z0-9_-]{32,}\b/);
-    if (tokenMatch && !/^[a-zA-Z]+$/.test(tokenMatch[0])) {
-      violations.push(`${path}: Contains potential secret token`);
-    }
-    return violations;
+    return checkStringPatterns(obj, path);
   }
   
   if (Array.isArray(obj)) {
+    const violations: string[] = [];
     obj.forEach((item, index) => {
       violations.push(...containsSensitiveData(item, `${path}[${index}]`));
     });
@@ -311,23 +334,8 @@ export function containsSensitiveData(obj: unknown, path: string = ''): string[]
   }
   
   if (typeof obj === 'object') {
-    for (const [key, value] of Object.entries(obj)) {
-      const lowerKey = key.toLowerCase();
-      const currentPath = path ? `${path}.${key}` : key;
-      
-      // Check if key name is sensitive
-      if (CONFIG.SENSITIVE_FIELD_NAMES.some(sensitive => 
-        lowerKey === sensitive || lowerKey.includes(sensitive)
-      )) {
-        if (value && value !== CONFIG.SANITIZE_REPLACEMENT) {
-          violations.push(`${currentPath}: Sensitive field not redacted`);
-        }
-      }
-      
-      // Recursively check value
-      violations.push(...containsSensitiveData(value, currentPath));
-    }
+    return checkObjectProperties(obj as Record<string, unknown>, path);
   }
   
-  return violations;
+  return [];
 }
