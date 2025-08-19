@@ -4,7 +4,7 @@ import { TEXT } from '../constants/text-constants.js';
 // Response type for tool responses
 interface ToolResponse {
   success: false;
-  message: string;
+  error: string;
   code: string;
 }
 
@@ -33,6 +33,10 @@ export const RESPONSE_BY_CODE: Record<string, { message: string; code: string }>
   [CONFIG.ERROR_CODE_UNKNOWN_TOOL]: { 
     message: TEXT.ERROR_UNKNOWN_TOOL, 
     code: CONFIG.ERROR_CODE_UNKNOWN_TOOL 
+  },
+  [CONFIG.ERROR_CODE_DUPLICATE_TOOL]: { 
+    message: TEXT.ERROR_DUPLICATE_TOOL, 
+    code: CONFIG.ERROR_CODE_DUPLICATE_TOOL 
   },
   [CONFIG.ERROR_CODE_INVALID_METHOD]: { 
     message: TEXT.ERROR_INVALID_METHOD, 
@@ -139,7 +143,7 @@ export function respondByCode(code: string): ToolResponse {
   const responseCode = response?.code || CONFIG.ERROR_CODE_EXECUTION_FAILED;
   return {
     success: false,
-    message,
+    error: message,
     code: responseCode
   };
 }

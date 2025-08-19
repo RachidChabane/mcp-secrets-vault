@@ -200,7 +200,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
+      expect(result.error).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
       expect(result.code).toBeDefined();
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -229,7 +229,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_UNKNOWN_SECRET);
+      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
       expect(result.code).toBe('unknown_secret');
     });
 
@@ -251,7 +251,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_UNKNOWN_SECRET);
+      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
       expect(result.code).toBe('unknown_secret');
     });
 
@@ -264,7 +264,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
       expect(result.code).toBe('invalid_request');
     });
 
@@ -280,7 +280,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_INVALID_URL);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
       expect(result.code).toBe('invalid_url');
     });
 
@@ -407,7 +407,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_RATE_LIMITED);
+      expect(result.error).toBe(TEXT.ERROR_RATE_LIMITED);
       expect(result.code).toBe('rate_limited');
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -504,7 +504,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_INVALID_URL);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
       expect(result.code).toBe('invalid_url');
     });
 
@@ -562,7 +562,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_INVALID_METHOD);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_METHOD);
       expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_METHOD);
     });
 
@@ -581,7 +581,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_INVALID_INJECTION_TYPE);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_INJECTION_TYPE);
       expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE);
     });
 
@@ -680,7 +680,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_INVALID_REQUEST);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
       expect(result.code).toBe('invalid_request');
 
       // Should have written audit with fallback values
@@ -719,7 +719,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
+      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
 
       // Should have written audit for the policy evaluation error
@@ -750,7 +750,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_INVALID_HEADERS);
+      expect(result.error).toBe(TEXT.ERROR_INVALID_HEADERS);
       expect(result.code).toBe('invalid_headers');
 
       // Should have written audit for invalid request
@@ -874,7 +874,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_MISSING_ENV);
+      expect(result.error).toBe(TEXT.ERROR_MISSING_ENV);
       expect(result.code).toBe('missing_env');
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -903,7 +903,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
+      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
     });
 
@@ -926,7 +926,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
+      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
 
       // Verify audit entry was created with error outcome
@@ -970,7 +970,7 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe(TEXT.ERROR_EXECUTION_FAILED);
+      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
       expect(result.code).toBe('execution_failed');
 
       // Should only write one audit entry (from executeSecretAction, not from handleExecutionError)

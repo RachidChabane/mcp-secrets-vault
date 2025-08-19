@@ -20,6 +20,7 @@ export class McpServerManager {
   private readonly transport: StdioServerTransport;
   private readonly toolRegistry: Map<string, McpTool>;
   private shutdownHandlers: Array<() => Promise<void>> = [];
+  private isShuttingDown = false;
 
   constructor() {
     this.server = new Server(
@@ -40,6 +41,15 @@ export class McpServerManager {
 
   registerTool(tool: McpTool): void {
     const toolDef = tool.getTool();
+    
+    // Check for duplicate tool registration
+    if (this.toolRegistry.has(toolDef.name)) {
+      throw new ToolError(
+        TEXT.ERROR_DUPLICATE_TOOL,
+        CONFIG.ERROR_CODE_DUPLICATE_TOOL
+      );
+    }
+    
     this.toolRegistry.set(toolDef.name, tool);
   }
 
@@ -85,7 +95,7 @@ export class McpServerManager {
 
   private createErrorResponse(error: unknown, toolName: string) {
     const { code, message } = this.extractErrorDetails(error);
-    writeError(message, { level: 'ERROR', code, tool: toolName });
+    writeError(message, { level: CONFIG.LOG_LEVEL_ERROR, code, tool: toolName });
     
     return {
       content: [{
@@ -116,7 +126,7 @@ export class McpServerManager {
     await this.server.connect(this.transport);
     
     writeError(TEXT.LOG_SERVER_STARTED, {
-      level: 'INFO',
+      level: CONFIG.LOG_LEVEL_INFO,
       version: CONFIG.VERSION
     });
     
@@ -125,11 +135,25 @@ export class McpServerManager {
 
   private setupShutdownHandlers(): void {
     const shutdown = async () => {
-      writeError(TEXT.LOG_SERVER_STOPPED, { level: 'INFO' });
+      // Ensure idempotence - prevent multiple shutdown executions
+      if (this.isShuttingDown) {
+        return;
+      }
+      this.isShuttingDown = true;
+      
+      writeError(TEXT.LOG_SERVER_STOPPED, { level: CONFIG.LOG_LEVEL_INFO });
       
       // Execute all registered shutdown handlers
       for (const handler of this.shutdownHandlers) {
-        await handler();
+        try {
+          await handler();
+        } catch (error) {
+          // Log but don't fail shutdown on handler errors
+          writeError(TEXT.LOG_SHUTDOWN_HANDLER_ERROR, { 
+            level: CONFIG.LOG_LEVEL_WARN,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
       }
       
       await this.server.close();

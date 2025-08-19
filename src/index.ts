@@ -26,7 +26,7 @@ async function loadMappings(): Promise<SecretMapping[]> {
       return JSON.parse(process.env['TEST_SECRET_MAPPINGS']);
     } catch (error) {
       writeError(TEXT.ERROR_INVALID_CONFIG, { 
-        level: 'ERROR',
+        level: CONFIG.LOG_LEVEL_ERROR,
         code: CONFIG.ERROR_CODE_INVALID_REQUEST 
       });
     }
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(() => {
     writeError(TEXT.ERROR_INVALID_CONFIG, { 
-      level: 'ERROR',
+      level: CONFIG.LOG_LEVEL_ERROR,
       code: CONFIG.ERROR_CODE_INVALID_REQUEST
     });
     process.exit(CONFIG.EXIT_CODE_ERROR);

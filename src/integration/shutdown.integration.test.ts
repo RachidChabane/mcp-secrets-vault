@@ -4,9 +4,7 @@ import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
 
 // Mock process.exit to prevent test runner from exiting
-const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-  throw new Error('process.exit called');
-});
+let mockExit: any;
 
 // Mock the MCP SDK modules
 vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
@@ -32,7 +30,12 @@ describe('Graceful Shutdown', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockExit.mockClear();
+    
+    // Set up process.exit mock
+    mockExit = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null | undefined) => {
+      // Don't actually exit, just record the call
+      return undefined as never;
+    });
     
     serverManager = new McpServerManager();
     
@@ -56,6 +59,9 @@ describe('Graceful Shutdown', () => {
     // Restore original process.on
     process.on = originalProcessOn;
     processListeners.clear();
+    // Restore process.exit
+    mockExit?.mockRestore();
+    vi.clearAllMocks();
   });
 
   describe('Shutdown Handler Registration', () => {
@@ -80,12 +86,8 @@ describe('Graceful Shutdown', () => {
       expect(sigintHandler).toBeDefined();
       
       // Execute shutdown
-      try {
-        if (sigintHandler) {
+      if (sigintHandler) {
         await sigintHandler();
-      }
-      } catch (error) {
-        // Expected due to mocked process.exit
       }
       
       expect(customHandler1).toHaveBeenCalled();
@@ -94,21 +96,17 @@ describe('Graceful Shutdown', () => {
 
     it('should close server on shutdown', async () => {
       const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
-      const mockServer = (Server as unknown as Mock).mock.results[0].value;
+      const mockServer = (Server as unknown as Mock).mock.results[0]?.value;
       
       await serverManager.start();
       
       const sigintHandler = processListeners.get('SIGINT')?.[0];
       
-      try {
-        if (sigintHandler) {
+      if (sigintHandler) {
         await sigintHandler();
       }
-      } catch (error) {
-        // Expected
-      }
       
-      expect(mockServer.close).toHaveBeenCalled();
+      expect(mockServer?.close).toHaveBeenCalled();
     });
 
     it('should log shutdown message', async () => {
@@ -118,17 +116,13 @@ describe('Graceful Shutdown', () => {
       
       const sigtermHandler = processListeners.get('SIGTERM')?.[0];
       
-      try {
-        if (sigtermHandler) {
+      if (sigtermHandler) {
         await sigtermHandler();
-      }
-      } catch (error) {
-        // Expected
       }
       
       expect(writeError).toHaveBeenCalledWith(
         TEXT.LOG_SERVER_STOPPED,
-        { level: 'INFO' }
+        { level: CONFIG.LOG_LEVEL_INFO }
       );
     });
 
@@ -137,12 +131,10 @@ describe('Graceful Shutdown', () => {
       
       const sigintHandler = processListeners.get('SIGINT')?.[0];
       
-      try {
-        if (sigintHandler) {
+      mockExit.mockClear(); // Clear any previous calls
+      
+      if (sigintHandler) {
         await sigintHandler();
-      }
-      } catch (error) {
-        // Expected
       }
       
       expect(mockExit).toHaveBeenCalledWith(CONFIG.EXIT_CODE_SUCCESS);
@@ -173,12 +165,8 @@ describe('Graceful Shutdown', () => {
       
       const sigintHandler = processListeners.get('SIGINT')?.[0];
       
-      try {
-        if (sigintHandler) {
+      if (sigintHandler) {
         await sigintHandler();
-      }
-      } catch (error) {
-        // Expected
       }
       
       expect(executionOrder).toEqual([1, 2, 3]);
@@ -195,52 +183,100 @@ describe('Graceful Shutdown', () => {
       
       const sigintHandler = processListeners.get('SIGINT')?.[0];
       
-      // Should not throw despite handler1 error
-      try {
-        if (sigintHandler) {
+      // Execute shutdown - errors in handlers should be caught internally
+      if (sigintHandler) {
         await sigintHandler();
       }
-      } catch (error: any) {
-        // Should only be process.exit error
-        expect(error.message).toBe('process.exit called');
-      }
       
-      // Both handlers should be called
+      // Both handlers should be called despite error in first
       expect(handler1).toHaveBeenCalled();
       expect(handler2).toHaveBeenCalled();
+      expect(mockExit).toHaveBeenCalledWith(CONFIG.EXIT_CODE_SUCCESS);
     });
   });
 
   describe('Multiple Shutdown Signals', () => {
-    it('should handle multiple shutdown signals gracefully', async () => {
+    it('should handle multiple shutdown signals gracefully (idempotence)', async () => {
       const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
-      const mockServer = (Server as unknown as Mock).mock.results[0].value;
+      const { writeError } = await import('../utils/logging.js');
+      const mockServer = (Server as unknown as Mock).mock.results[0]?.value;
+      
+      const customHandler = vi.fn().mockResolvedValue(undefined);
+      serverManager.registerShutdownHandler(customHandler);
       
       await serverManager.start();
       
       const sigintHandler = processListeners.get('SIGINT')?.[0];
       const sigtermHandler = processListeners.get('SIGTERM')?.[0];
       
+      // Clear previous log calls from start
+      (writeError as Mock).mockClear();
+      mockServer.close.mockClear();
+      mockExit.mockClear();
+      
       // First signal
-      try {
-        if (sigintHandler) {
+      if (sigintHandler) {
         await sigintHandler();
       }
-      } catch (error) {
-        // Expected
-      }
       
-      // Second signal (should be idempotent)
-      try {
-        if (sigtermHandler) {
+      // Verify first shutdown executed
+      expect(mockServer?.close).toHaveBeenCalledTimes(1);
+      expect(customHandler).toHaveBeenCalledTimes(1);
+      expect(writeError).toHaveBeenCalledTimes(1);
+      expect(writeError).toHaveBeenCalledWith(
+        TEXT.LOG_SERVER_STOPPED,
+        { level: CONFIG.LOG_LEVEL_INFO }
+      );
+      expect(mockExit).toHaveBeenCalledTimes(1);
+      
+      // Clear mocks for second signal
+      mockServer.close.mockClear();
+      customHandler.mockClear();
+      (writeError as Mock).mockClear();
+      mockExit.mockClear();
+      
+      // Second signal (should be idempotent - no operations)
+      if (sigtermHandler) {
         await sigtermHandler();
       }
-      } catch (error) {
-        // Expected
+      
+      // Verify no duplicate operations
+      expect(mockServer?.close).toHaveBeenCalledTimes(0);
+      expect(customHandler).toHaveBeenCalledTimes(0);
+      expect(writeError).toHaveBeenCalledTimes(0);
+      expect(mockExit).toHaveBeenCalledTimes(0);
+    });
+    
+    it('should handle rapid concurrent shutdown signals', async () => {
+      const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
+      const mockServer = (Server as unknown as Mock).mock.results[0]?.value;
+      
+      const customHandler = vi.fn().mockResolvedValue(undefined);
+      serverManager.registerShutdownHandler(customHandler);
+      
+      await serverManager.start();
+      
+      const sigintHandler = processListeners.get('SIGINT')?.[0];
+      
+      // Clear previous calls
+      mockServer.close.mockClear();
+      customHandler.mockClear();
+      mockExit.mockClear();
+      
+      // Send multiple signals concurrently
+      const promises = [];
+      for (let i = 0; i < 5; i++) {
+        promises.push(
+          sigintHandler ? sigintHandler() : Promise.resolve()
+        );
       }
       
-      // Server close should only be called once
-      expect(mockServer.close).toHaveBeenCalledTimes(1);
+      await Promise.all(promises);
+      
+      // Should only execute shutdown once despite multiple concurrent calls
+      expect(mockServer?.close).toHaveBeenCalledTimes(1);
+      expect(customHandler).toHaveBeenCalledTimes(1);
+      expect(mockExit).toHaveBeenCalledTimes(1);
     });
   });
 });
