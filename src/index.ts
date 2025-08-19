@@ -36,39 +36,42 @@ async function loadMappings(): Promise<SecretMapping[]> {
 }
 
 
-async function main(): Promise<void> {
-  // Initialize server manager
-  const serverManager = new McpServerManager();
-  
-  // Load mappings and initialize providers
-  const mappings = await loadMappings();
+async function createServices(mappings: SecretMapping[]) {
   const secretProvider = new EnvSecretProvider(mappings);
   const policyProvider = new PolicyProviderService();
   const actionExecutor = new HttpActionExecutor();
   const rateLimiter = new RateLimiterService();
   const auditService = new JsonlAuditService();
   
-  // Initialize services
   await auditService.initialize();
   await policyProvider.loadPolicies();
   
-  // Initialize and register tools
-  const discoverTool = new DiscoverTool(secretProvider);
-  const describePolicyTool = new DescribePolicyTool(policyProvider);
-  const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
-  const queryAuditTool = new QueryAuditTool(auditService);
+  return { secretProvider, policyProvider, actionExecutor, rateLimiter, auditService };
+}
+
+function createTools(services: Awaited<ReturnType<typeof createServices>>) {
+  const { secretProvider, policyProvider, actionExecutor, rateLimiter, auditService } = services;
   
-  serverManager.registerTool(discoverTool);
-  serverManager.registerTool(describePolicyTool);
-  serverManager.registerTool(useSecretTool);
-  serverManager.registerTool(queryAuditTool);
+  return {
+    discoverTool: new DiscoverTool(secretProvider),
+    describePolicyTool: new DescribePolicyTool(policyProvider),
+    useSecretTool: new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter),
+    queryAuditTool: new QueryAuditTool(auditService)
+  };
+}
+
+async function main(): Promise<void> {
+  const serverManager = new McpServerManager();
+  const mappings = await loadMappings();
+  const services = await createServices(mappings);
+  const tools = createTools(services);
   
-  // Register shutdown handler for audit service
+  Object.values(tools).forEach(tool => serverManager.registerTool(tool));
+  
   serverManager.registerShutdownHandler(async () => {
-    await auditService.close();
+    await services.auditService.close();
   });
   
-  // Start the server
   await serverManager.start();
 }
 
