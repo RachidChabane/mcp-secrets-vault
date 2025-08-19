@@ -36,6 +36,7 @@ export const TEXT = {
   ERROR_EMPTY_HEADER_NAME: 'Header name cannot be empty',
   ERROR_UNKNOWN_TOOL: 'Unknown tool requested',
   ERROR_TOOL_EXECUTION_FAILED: 'Tool execution failed',
+  ERROR_DUPLICATE_TOOL: 'Duplicate tool registration',
   ERROR_INVALID_METHOD: 'Invalid HTTP method',
   ERROR_INVALID_INJECTION_TYPE: 'Invalid injection type',
   ERROR_INVALID_URL: 'Invalid URL format',
@@ -82,6 +83,7 @@ export const TEXT = {
   // Log messages
   LOG_SERVER_STARTED: 'MCP server started',
   LOG_SERVER_STOPPED: 'MCP server stopped',
+  LOG_SHUTDOWN_HANDLER_ERROR: 'Shutdown handler error',
   LOG_PROCESSING_REQUEST: 'Processing request',
   LOG_REQUEST_DENIED: 'Request denied',
   LOG_REQUEST_ALLOWED: 'Request allowed',

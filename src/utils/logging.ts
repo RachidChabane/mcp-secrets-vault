@@ -1,7 +1,7 @@
 import { CONFIG } from '../constants/config-constants.js';
 
 interface LogContext {
-  level?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  level?: typeof CONFIG.LOG_LEVEL_DEBUG | typeof CONFIG.LOG_LEVEL_INFO | typeof CONFIG.LOG_LEVEL_WARN | typeof CONFIG.LOG_LEVEL_ERROR;
   [key: string]: unknown;
 }
 
@@ -90,7 +90,7 @@ function redactValue(value: unknown): unknown {
 }
 
 export function writeError(message: string, context: LogContext = {}): void {
-  const { level = 'ERROR', ...rest } = context;
+  const { level = CONFIG.LOG_LEVEL_ERROR, ...rest } = context;
   
   const redactedRest = redactValue(rest);
   const logEntry = {

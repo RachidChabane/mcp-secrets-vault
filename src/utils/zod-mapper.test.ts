@@ -10,8 +10,10 @@ describe('mapZodErrorToToolError', () => {
       const error = new z.ZodError([{
         path: ['action', 'type'],
         message: 'Invalid enum value',
-        code: 'invalid_enum_value'
-      }]);
+        code: 'invalid_enum_value',
+        received: 'DELETE',
+        options: ['http_get', 'http_post']
+      } as z.ZodIssue]);
       
       const toolError = mapZodErrorToToolError(error);
       expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_METHOD);
@@ -22,8 +24,10 @@ describe('mapZodErrorToToolError', () => {
       const error = new z.ZodError([{
         path: ['action', 'injectionType'],
         message: 'Invalid enum value',
-        code: 'invalid_enum_value'
-      }]);
+        code: 'invalid_enum_value',
+        received: 'custom',
+        options: ['bearer', 'header']
+      } as z.ZodIssue]);
       
       const toolError = mapZodErrorToToolError(error);
       expect(toolError.code).toBe(CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE);
@@ -156,8 +160,10 @@ describe('mapZodErrorToToolError', () => {
         {
           path: ['action', 'type'],
           message: 'Invalid type',
-          code: 'invalid_enum_value'
-        }
+          code: 'invalid_enum_value',
+          received: 'DELETE',
+          options: ['GET', 'POST']
+        } as z.ZodIssue
       ]);
       
       const toolError = mapZodErrorToToolError(error);

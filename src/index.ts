@@ -1,8 +1,5 @@
 #!/usr/bin/env node
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { CONFIG } from './constants/config-constants.js';
 import { TEXT } from './constants/text-constants.js';
 import { EnvSecretProvider } from './services/env-secret-provider.js';
@@ -15,8 +12,8 @@ import { UseSecretTool } from './tools/use-secret-tool.js';
 import { QueryAuditTool } from './tools/query-audit-tool.js';
 import { SecretMapping } from './interfaces/secret-mapping.interface.js';
 import { JsonlAuditService } from './services/audit-service.js';
+import { McpServerManager } from './services/mcp-server-manager.js';
 import { writeError } from './utils/logging.js';
-import { ToolError } from './utils/errors.js';
 
 async function loadMappings(): Promise<SecretMapping[]> {
   // TODO: Load from configuration file
@@ -29,7 +26,7 @@ async function loadMappings(): Promise<SecretMapping[]> {
       return JSON.parse(process.env['TEST_SECRET_MAPPINGS']);
     } catch (error) {
       writeError(TEXT.ERROR_INVALID_CONFIG, { 
-        level: 'ERROR',
+        level: CONFIG.LOG_LEVEL_ERROR,
         code: CONFIG.ERROR_CODE_INVALID_REQUEST 
       });
     }
@@ -38,156 +35,50 @@ async function loadMappings(): Promise<SecretMapping[]> {
   return mappings;
 }
 
-function extractErrorDetails(error: unknown): { code: string; message: string } {
-  if (error instanceof ToolError) {
-    return { code: error.code, message: error.message };
-  }
-  return { 
-    code: CONFIG.ERROR_CODE_INVALID_REQUEST, 
-    message: TEXT.ERROR_TOOL_EXECUTION_FAILED 
-  };
-}
 
-function createErrorResponse(
-  error: unknown, 
-  toolName: string
-): { content: Array<{ type: string; text: string }>; isError: boolean } {
-  const { code, message } = extractErrorDetails(error);
-  writeError(message, { level: 'ERROR', code, tool: toolName });
-  
-  return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        [TEXT.FIELD_ERROR]: {
-          [TEXT.FIELD_CODE]: code,
-          [TEXT.FIELD_MESSAGE]: message
-        }
-      }, null, 2),
-    }],
-    isError: true,
-  };
-}
-
-function createSuccessResponse(
-  result: unknown
-): { content: Array<{ type: string; text: string }> } {
-  return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify(result, null, 2),
-    }],
-  };
-}
-
-async function executeTool(
-  name: string, 
-  args: unknown,
-  discoverTool: DiscoverTool,
-  describePolicyTool: DescribePolicyTool,
-  useSecretTool: UseSecretTool,
-  queryAuditTool: QueryAuditTool
-): Promise<unknown> {
-  switch (name) {
-    case TEXT.TOOL_DISCOVER:
-      return await discoverTool.execute(args);
-    case TEXT.TOOL_DESCRIBE:
-      return await describePolicyTool.execute(args);
-    case TEXT.TOOL_USE:
-      return await useSecretTool.execute(args);
-    case TEXT.TOOL_AUDIT:
-      return await queryAuditTool.execute(args);
-    default:
-      throw new ToolError(
-        TEXT.ERROR_UNKNOWN_TOOL,
-        CONFIG.ERROR_CODE_UNKNOWN_TOOL
-      );
-  }
-}
-
-async function main(): Promise<void> {
-  const server = new Server(
-    {
-      name: CONFIG.SERVER_NAME,
-      version: CONFIG.VERSION,
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
-  );
-
-  // Load mappings and initialize providers
-  const mappings = await loadMappings();
+async function createServices(mappings: SecretMapping[]) {
   const secretProvider = new EnvSecretProvider(mappings);
   const policyProvider = new PolicyProviderService();
   const actionExecutor = new HttpActionExecutor();
   const rateLimiter = new RateLimiterService();
   const auditService = new JsonlAuditService();
   
-  // Initialize audit service
   await auditService.initialize();
-  
-  // Load policies
   await policyProvider.loadPolicies();
   
-  // Initialize tools
-  const discoverTool = new DiscoverTool(secretProvider);
-  const describePolicyTool = new DescribePolicyTool(policyProvider);
-  const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
-  const queryAuditTool = new QueryAuditTool(auditService);
-  
-  // Register tool listing handler
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      discoverTool.getTool(),
-      describePolicyTool.getTool(),
-      useSecretTool.getTool(),
-      queryAuditTool.getTool(),
-    ],
-  }));
+  return { secretProvider, policyProvider, actionExecutor, rateLimiter, auditService };
+}
 
-  // Register tool execution handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-    
-    try {
-      const result = await executeTool(name, args, discoverTool, describePolicyTool, useSecretTool, queryAuditTool);
-      return createSuccessResponse(result);
-    } catch (error) {
-      return createErrorResponse(error, name);
-    }
-  });
-
-  // Setup transport
-  const transport = new StdioServerTransport();
+function createTools(services: Awaited<ReturnType<typeof createServices>>) {
+  const { secretProvider, policyProvider, actionExecutor, rateLimiter, auditService } = services;
   
-  // Connect server to transport
-  await server.connect(transport);
-  
-  // Log startup
-  writeError(TEXT.LOG_SERVER_STARTED, {
-    level: 'INFO',
-    version: CONFIG.VERSION
-  });
-  
-  // Handle shutdown signals
-  const shutdown = async () => {
-    writeError(TEXT.LOG_SERVER_STOPPED, { level: 'INFO' });
-    await auditService.close();
-    await server.close();
-    process.exit(CONFIG.EXIT_CODE_SUCCESS);
+  return {
+    discoverTool: new DiscoverTool(secretProvider),
+    describePolicyTool: new DescribePolicyTool(policyProvider),
+    useSecretTool: new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter),
+    queryAuditTool: new QueryAuditTool(auditService)
   };
+}
+
+async function main(): Promise<void> {
+  const serverManager = new McpServerManager();
+  const mappings = await loadMappings();
+  const services = await createServices(mappings);
+  const tools = createTools(services);
   
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  Object.values(tools).forEach(tool => serverManager.registerTool(tool));
+  
+  serverManager.registerShutdownHandler(async () => {
+    await services.auditService.close();
+  });
+  
+  await serverManager.start();
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(() => {
     writeError(TEXT.ERROR_INVALID_CONFIG, { 
-      level: 'ERROR',
+      level: CONFIG.LOG_LEVEL_ERROR,
       code: CONFIG.ERROR_CODE_INVALID_REQUEST
     });
     process.exit(CONFIG.EXIT_CODE_ERROR);

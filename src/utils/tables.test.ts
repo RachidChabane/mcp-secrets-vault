@@ -13,7 +13,8 @@ describe('Table Coverage', () => {
     it('covers all currently defined ERROR_CODE constants', () => {
       const errorCodes = Object.entries(CONFIG)
         .filter(([key]) => key.startsWith('ERROR_CODE_'))
-        .map(([, value]) => value);
+        .filter(([, value]) => typeof value === 'string')
+        .map(([, value]) => value as string);
       
       // Check that each defined error code has an entry
       const missingCodes: string[] = [];
@@ -74,8 +75,8 @@ describe('Table Coverage', () => {
     });
     
     it('injects bearer token correctly', () => {
-      const headers = { 'content-type': 'application/json' };
-      const result = INJECTION_HANDLERS[TEXT.INJECTION_TYPE_BEARER](headers, 'secret123');
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      const result = INJECTION_HANDLERS[TEXT.INJECTION_TYPE_BEARER](headers, 'secret123') as Record<string, string>;
       
       expect(result).toHaveProperty(TEXT.AUTHORIZATION_HEADER);
       expect(result[TEXT.AUTHORIZATION_HEADER]).toBe('Bearer secret123');
@@ -83,8 +84,8 @@ describe('Table Coverage', () => {
     });
     
     it('injects header secret correctly', () => {
-      const headers = { 'content-type': 'application/json' };
-      const result = INJECTION_HANDLERS[TEXT.INJECTION_TYPE_HEADER](headers, 'secret123');
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      const result = INJECTION_HANDLERS[TEXT.INJECTION_TYPE_HEADER](headers, 'secret123') as Record<string, string>;
       
       expect(result).toHaveProperty(TEXT.SECRET_HEADER_NAME);
       expect(result[TEXT.SECRET_HEADER_NAME]).toBe('secret123');
@@ -98,7 +99,7 @@ describe('Table Coverage', () => {
       
       expect(response).toEqual({
         success: false,
-        message: TEXT.ERROR_INVALID_REQUEST,
+        error: TEXT.ERROR_INVALID_REQUEST,
         code: CONFIG.ERROR_CODE_INVALID_REQUEST
       });
     });
@@ -108,7 +109,7 @@ describe('Table Coverage', () => {
       
       expect(response).toEqual({
         success: false,
-        message: TEXT.ERROR_EXECUTION_FAILED,
+        error: TEXT.ERROR_EXECUTION_FAILED,
         code: CONFIG.ERROR_CODE_EXECUTION_FAILED
       });
     });

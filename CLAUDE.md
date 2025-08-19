@@ -17,40 +17,81 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Code Quality
 - **Type checking**: `npm run typecheck` or `npm run lint` - Both run TypeScript compiler checks
+- **Function length check**: `node check_function_length.js` - Validate 20-line function limit
 - **Before committing**: Always run `npm run typecheck` to ensure no type errors
 
 ## Project Architecture
 
-This is an MCP (Model Context Protocol) server for secure secret management. The codebase follows a modular TypeScript architecture:
+This is an MCP (Model Context Protocol) server for secure secret management with policy-based access control, rate limiting, and comprehensive audit logging.
 
-### Core Structure
-- **src/index.ts**: Entry point - MCP server initialization and tool registration
-- **src/constants/**: Configuration and text constants with strict typing
-  - config-constants.ts: Server configuration, limits, timeouts, error codes
-  - text-constants.ts: User-facing messages and strings
-- **src/interfaces/**: TypeScript interfaces (currently empty, to be populated)
-- **src/services/**: Business logic services (currently empty, to be populated)
-- **src/tools/**: MCP tool implementations (currently empty, to be populated)
-- **src/utils/**: Utility functions (currently empty, to be populated)
+### Core Architecture Components
+
+**MCP Server Core** (src/index.ts):
+- Server initialization with stdio transport
+- Tool registration and request routing using table-driven dispatch
+- Centralized error handling with structured responses
+- Graceful shutdown handling
+
+**Constants Layer** (src/constants/):
+- config-constants.ts: All configuration values, limits, timeouts, error codes
+- text-constants.ts: User-facing messages, field names, validation text
+- Strict TypeScript typing with `as const` assertions
+
+**Service Layer** (src/services/):
+- **EnvSecretProvider**: Maps secret IDs to environment variables
+- **PolicyProviderService**: Loads and manages access policies
+- **PolicyEvaluatorService**: Evaluates requests against policies
+- **HttpActionExecutor**: Executes HTTP requests with secrets
+- **RateLimiterService**: Token bucket rate limiting per secret
+- **JsonlAuditService**: Structured audit logging with rotation
+
+**Tool Layer** (src/tools/):
+- **DiscoverTool**: Lists available secrets
+- **DescribePolicyTool**: Shows policy details for secrets
+- **UseSecretTool**: Executes actions with secrets (HTTP GET/POST)
+- **QueryAuditTool**: Queries audit logs with pagination
+
+**Interface Layer** (src/interfaces/):
+- Type definitions for all major components
+- Separation of concerns between data models and business logic
+
+**Utility Layer** (src/utils/):
+- Error handling with structured ToolError class
+- Security utilities for sanitization and validation
+- Logging with sensitive data redaction
+- Table-driven utilities for configuration
 
 ### Key Technical Decisions
-- **TypeScript**: Strict mode enabled with all strict checks
-- **Module System**: ES modules (type: "module" in package.json)
+
+- **TypeScript**: Strict mode with all strict checks enabled
+- **Module System**: Pure ES modules (type: "module")
 - **Node Version**: Requires Node.js 20+
-- **Build Tool**: tsup for fast ESM builds
-- **Test Framework**: Vitest with 80% coverage requirement
-- **Dependencies**: 
-  - @modelcontextprotocol/sdk for MCP integration
-  - zod for runtime validation
+- **Build Tool**: tsup for fast ESM builds with CLI shebang
+- **Test Framework**: Vitest with 95%+ coverage achieved
+- **Architecture Pattern**: Dependency injection with service composition
+- **Error Handling**: Structured errors with codes and user-friendly messages
+
+### Security Design
+
+- **No Secret Exposure**: Secrets never returned in responses, only used for actions
+- **Policy-Based Access**: Every secret requires an explicit policy
+- **Rate Limiting**: Configurable per-secret rate limits with token bucket algorithm
+- **Audit Logging**: Comprehensive JSONL audit trail for compliance
+- **Input Sanitization**: All user inputs validated with Zod schemas
+- **Environment Isolation**: Secrets only accessible via controlled environment variable mapping
 
 ### Code Quality Standards
-- Maximum function length: 20 lines (enforced by MAX_FUNCTION_LINES constant)
-- All constants centralized in constants/ directory
-- Comprehensive test coverage for all constants and utilities
-- TypeScript strict mode with no implicit any
+
+- **Function Length**: Maximum 20 lines (enforced by check_function_length.js)
+- **Test Coverage**: 95%+ achieved (80% threshold required)
+- **Constant Centralization**: All strings and configuration in constants/
+- **Table-Driven Design**: Eliminates type-based branching in favor of lookup tables
+- **Error Codes**: Structured error responses with consistent codes
 
 ### Testing Strategy
-- Unit tests use Vitest with .test.ts suffix
-- Tests colocated with source files
-- Coverage thresholds: 80% for branches, functions, lines, and statements
-- Mock reset and restore enabled for test isolation
+
+- **Unit Tests**: .test.ts suffix, colocated with source files
+- **Integration Tests**: .integration.test.ts for cross-component testing
+- **Snapshot Tests**: .snapshot.test.ts for complex object validation
+- **Coverage**: v8 provider with HTML/LCOV reports
+- **Mocking**: Automatic reset/restore for test isolation
