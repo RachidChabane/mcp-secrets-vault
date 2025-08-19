@@ -1,5 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { AuditService, AuditQueryOptions } from '../interfaces/audit.interface.js';
+import { AuditService, AuditQueryOptions, AuditQueryResult, AuditEntry } from '../interfaces/audit.interface.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
 import { ToolError } from '../utils/errors.js';
@@ -77,66 +77,71 @@ export class QueryAuditTool {
     return this.tool;
   }
 
-  async execute(args: unknown): Promise<QueryAuditResponse> {
-    let validatedArgs: QueryAuditRequest;
-    
+  private validateArgs(args: unknown): QueryAuditRequest {
     try {
-      validatedArgs = QueryAuditSchema.parse(args || {});
+      return QueryAuditSchema.parse(args || {});
     } catch (error) {
       throw new ToolError(
         TEXT.ERROR_INVALID_REQUEST,
         CONFIG.ERROR_CODE_INVALID_REQUEST
       );
     }
+  }
 
-    // Validate time range if provided
-    if (validatedArgs.startTime) {
-      const start = new Date(validatedArgs.startTime).getTime();
-      if (isNaN(start)) {
-        throw new ToolError(
-          TEXT.ERROR_INVALID_REQUEST,
-          CONFIG.ERROR_CODE_INVALID_REQUEST
-        );
-      }
-    }
+  private validateSingleTime(timeStr: string | undefined): void {
+    if (!timeStr) return;
     
-    if (validatedArgs.endTime) {
-      const end = new Date(validatedArgs.endTime).getTime();
-      if (isNaN(end)) {
-        throw new ToolError(
-          TEXT.ERROR_INVALID_REQUEST,
-          CONFIG.ERROR_CODE_INVALID_REQUEST
-        );
-      }
+    const time = new Date(timeStr).getTime();
+    if (isNaN(time)) {
+      throw new ToolError(
+        TEXT.ERROR_INVALID_REQUEST,
+        CONFIG.ERROR_CODE_INVALID_REQUEST
+      );
     }
-    
-    if (validatedArgs.startTime && validatedArgs.endTime) {
-      const start = new Date(validatedArgs.startTime).getTime();
-      const end = new Date(validatedArgs.endTime).getTime();
-      
-      if (start > end) {
-        throw new ToolError(
-          TEXT.ERROR_INVALID_REQUEST,
-          CONFIG.ERROR_CODE_INVALID_REQUEST
-        );
-      }
-    }
+  }
 
-    // Build query options
-    const options: AuditQueryOptions = {
-      secretId: validatedArgs.secretId,
-      startTime: validatedArgs.startTime,
-      endTime: validatedArgs.endTime,
-      outcome: validatedArgs.outcome,
-      page: validatedArgs.page ?? CONFIG.DEFAULT_PAGE_NUMBER,
-      pageSize: validatedArgs.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE
+  private validateTimeOrder(startTime: string, endTime: string): void {
+    const start = new Date(startTime).getTime();
+    const end = new Date(endTime).getTime();
+    
+    if (start > end) {
+      throw new ToolError(
+        TEXT.ERROR_INVALID_REQUEST,
+        CONFIG.ERROR_CODE_INVALID_REQUEST
+      );
+    }
+  }
+
+  private validateTimeRange(args: QueryAuditRequest): void {
+    this.validateSingleTime(args.startTime);
+    this.validateSingleTime(args.endTime);
+    
+    if (args.startTime && args.endTime) {
+      this.validateTimeOrder(args.startTime, args.endTime);
+    }
+  }
+
+  private buildQueryOptions(args: QueryAuditRequest): AuditQueryOptions {
+    return {
+      secretId: args.secretId,
+      startTime: args.startTime,
+      endTime: args.endTime,
+      outcome: args.outcome,
+      page: args.page ?? CONFIG.DEFAULT_PAGE_NUMBER,
+      pageSize: args.pageSize ?? CONFIG.DEFAULT_PAGE_SIZE
     };
+  }
 
-    // Query audit entries
-    const result = await this.auditService.query(options);
-
-    // Format response with immutable entries
-    const formattedEntries = result.entries.map(entry => Object.freeze({
+  private formatAuditEntry(entry: AuditEntry): Readonly<{
+    readonly timestamp: string;
+    readonly secretId: string;
+    readonly action: string;
+    readonly outcome: string;
+    readonly reason: string;
+    readonly domain?: string;
+    readonly method?: string;
+  }> {
+    return Object.freeze({
       [TEXT.FIELD_TIMESTAMP]: entry.timestamp,
       [TEXT.FIELD_SECRET_ID]: entry.secretId,
       [TEXT.FIELD_ACTION]: entry.action,
@@ -144,7 +149,13 @@ export class QueryAuditTool {
       [TEXT.FIELD_REASON]: entry.reason,
       ...(entry.domain && { [TEXT.FIELD_DOMAIN]: entry.domain }),
       ...(entry.method && { [TEXT.FIELD_METHOD]: entry.method })
-    }));
+    });
+  }
+
+  private formatResponse(result: AuditQueryResult): QueryAuditResponse {
+    const formattedEntries = result.entries.map((entry: AuditEntry) => 
+      this.formatAuditEntry(entry)
+    );
 
     return Object.freeze({
       [TEXT.FIELD_ENTRIES]: Object.freeze(formattedEntries),
@@ -153,5 +164,13 @@ export class QueryAuditTool {
       [TEXT.FIELD_PAGE_SIZE]: result.pageSize,
       [TEXT.FIELD_HAS_MORE]: result.hasMore
     });
+  }
+
+  async execute(args: unknown): Promise<QueryAuditResponse> {
+    const validatedArgs = this.validateArgs(args);
+    this.validateTimeRange(validatedArgs);
+    const options = this.buildQueryOptions(validatedArgs);
+    const result = await this.auditService.query(options);
+    return this.formatResponse(result);
   }
 }
