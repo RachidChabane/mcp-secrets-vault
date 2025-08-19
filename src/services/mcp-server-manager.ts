@@ -8,7 +8,8 @@ import {
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
 import { writeError } from '../utils/logging.js';
-import { ToolError } from '../utils/errors.js';
+import { ToolError, sanitizeUnknownError } from '../utils/errors.js';
+import { sanitizeResponse } from '../utils/security.js';
 
 export interface McpTool {
   getTool(): Tool;
@@ -85,27 +86,36 @@ export class McpServerManager {
   }
 
   private createSuccessResponse(result: unknown) {
+    // Deep sanitize and make immutable before serializing
+    const sanitized = sanitizeResponse(result);
+    
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify(result, null, 2),
+        text: JSON.stringify(sanitized, null, 2),
       }],
     };
   }
 
   private createErrorResponse(error: unknown, toolName: string) {
-    const { code, message } = this.extractErrorDetails(error);
+    // Sanitize error to ensure no sensitive data leaks
+    const safeError = sanitizeUnknownError(error);
+    const { code, message } = this.extractErrorDetails(safeError);
+    
     writeError(message, { level: CONFIG.LOG_LEVEL_ERROR, code, tool: toolName });
+    
+    // Create sanitized error response
+    const errorResponse = sanitizeResponse({
+      [TEXT.FIELD_ERROR]: {
+        [TEXT.FIELD_CODE]: code,
+        [TEXT.FIELD_MESSAGE]: message
+      }
+    });
     
     return {
       content: [{
         type: 'text',
-        text: JSON.stringify({
-          [TEXT.FIELD_ERROR]: {
-            [TEXT.FIELD_CODE]: code,
-            [TEXT.FIELD_MESSAGE]: message
-          }
-        }, null, 2),
+        text: JSON.stringify(errorResponse, null, 2),
       }],
       isError: true,
     };
@@ -113,8 +123,10 @@ export class McpServerManager {
 
   private extractErrorDetails(error: unknown): { code: string; message: string } {
     if (error instanceof ToolError) {
+      // Already sanitized in constructor
       return { code: error.code, message: error.message };
     }
+    // For unknown errors, use safe defaults
     return { 
       code: CONFIG.ERROR_CODE_INVALID_REQUEST, 
       message: TEXT.ERROR_TOOL_EXECUTION_FAILED 
@@ -151,7 +163,7 @@ export class McpServerManager {
           // Log but don't fail shutdown on handler errors
           writeError(TEXT.LOG_SHUTDOWN_HANDLER_ERROR, { 
             level: CONFIG.LOG_LEVEL_WARN,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: error instanceof Error ? error.message : TEXT.ERROR_UNKNOWN
           });
         }
       }
@@ -160,7 +172,7 @@ export class McpServerManager {
       process.exit(CONFIG.EXIT_CODE_SUCCESS);
     };
     
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    process.on(CONFIG.SIGNAL_INT, shutdown);
+    process.on(CONFIG.SIGNAL_TERM, shutdown);
   }
 }

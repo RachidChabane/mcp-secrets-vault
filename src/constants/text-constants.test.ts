@@ -40,7 +40,10 @@ describe('Text Constants', () => {
       'type',      // Used by FIELD_TYPE, SCHEMA_TYPE, and in SCHEMA_REQUIRED_ACTION array
       'url',       // Used by FIELD_URL and in SCHEMA_REQUIRED_ACTION array
       'secretId',  // Used by FIELD_SECRET_ID and in SCHEMA_REQUIRED_USE_SECRET array
-      'action'     // Used by FIELD_ACTION and in SCHEMA_REQUIRED_USE_SECRET array
+      'action',    // Used by FIELD_ACTION and in SCHEMA_REQUIRED_USE_SECRET array
+      'Invalid action format',  // Used by ERROR_INVALID_ACTION and ERROR_INVALID_ACTION_FORMAT
+      'Invalid domain format',  // Used by ERROR_INVALID_DOMAIN and ERROR_INVALID_DOMAIN_FORMAT
+      'Invalid URL format'      // Used by ERROR_INVALID_URL and ERROR_INVALID_URL_FORMAT
     ];
     
     const expectedDuplicates = flattenedValues.filter(value => 

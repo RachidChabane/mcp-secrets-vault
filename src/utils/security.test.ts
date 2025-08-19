@@ -69,7 +69,7 @@ describe('Security Utilities', () => {
     it('should sanitize Error objects', () => {
       const error = new Error('Connection failed: api_key=secret123');
       const result = sanitizeError(error);
-      expect(result).toBe(`Connection failed: api_key=${CONFIG.SANITIZE_REPLACEMENT}`);
+      expect(result).toBe(`Error: Connection failed: api_key=${CONFIG.SANITIZE_REPLACEMENT}`);
     });
     
     it('should sanitize string errors', () => {

@@ -39,9 +39,9 @@ function redactValue(value: unknown): unknown {
     let redacted = value;
     
     // Special handling for error stacks
-    if (value.includes('\n    at ')) {
+    if (value.includes(CONFIG.STACK_TRACE_PATTERN)) {
       // Remove stack traces
-      redacted = redacted.split('\n')[0] || ''; // Keep only first line
+      redacted = redacted.split('\n')[0] || CONFIG.EMPTY_STRING_FALLBACK; // Keep only first line
     }
     
     for (const pattern of REDACTION_PATTERNS) {
@@ -64,15 +64,14 @@ function redactValue(value: unknown): unknown {
           SENSITIVE_KEYS.some(sensitive => {
             const lowerSensitive = sensitive.toLowerCase();
             return lowerKey === lowerSensitive || 
-                   (lowerKey.includes(lowerSensitive) && lowerKey !== 'description' && lowerKey !== 'environment');
+                   (lowerKey.includes(lowerSensitive) && !CONFIG.EXCEPTION_FIELD_NAMES.includes(key as any));
           })) {
         redacted[key] = CONFIG.SANITIZE_REPLACEMENT;
       } else if (key === 'environment' && typeof val === 'object' && val !== null) {
         // Special handling for environment objects
         const envRedacted: Record<string, unknown> = {};
         for (const [envKey, envVal] of Object.entries(val)) {
-          if (envKey.includes('SECRET') || envKey.includes('KEY') || 
-              envKey.includes('TOKEN') || envKey.includes('PASSWORD')) {
+          if (CONFIG.SENSITIVE_KEY_PATTERNS.some(pattern => envKey.includes(pattern))) {
             envRedacted[envKey] = CONFIG.SANITIZE_REPLACEMENT;
           } else {
             envRedacted[envKey] = envVal;
