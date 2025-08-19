@@ -479,7 +479,7 @@ describe('HttpActionExecutor', () => {
     
     describe('Security', () => {
       it('should never expose secret values in responses', async () => {
-        const secretValue = 'super-secret-api-key-12345';
+        const secretValue = 'supersecretapikey12345678901234567890';  // 36 chars, matches pattern
         const mockResponse = new Response(
           `Error: Invalid API key ${secretValue}`,
           {

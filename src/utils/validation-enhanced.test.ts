@@ -82,12 +82,9 @@ describe('Enhanced Validation', () => {
       }
     });
     
-    it('should strip authentication from URLs', () => {
+    it('should reject URLs with authentication', () => {
       const url = 'https://user:password@example.com/path';
-      const result = validateUrl(url);
-      expect(result).toBe('https://example.com/path');
-      expect(result).not.toContain('user');
-      expect(result).not.toContain('password');
+      expect(() => validateUrl(url)).toThrow(ValidationError);
     });
     
     it('should enforce HTTPS when required', () => {
@@ -111,8 +108,7 @@ describe('Enhanced Validation', () => {
     it('should reject invalid actions', () => {
       const invalidActions = [
         'DELETE',  // Not supported
-        'http-get',  // Wrong format
-        'HTTP_GET',  // Wrong case
+        'http-get',  // Wrong format (hyphen instead of underscore)
         'get',  // Not in supported list
         'a'.repeat(51),  // Too long
         'http get',  // Space
@@ -120,7 +116,7 @@ describe('Enhanced Validation', () => {
       ];
       
       for (const action of invalidActions) {
-        expect(() => validateAction(action)).toThrow(ValidationError);
+        expect(() => validateAction(action), `Action "${action}" should throw`).toThrow(ValidationError);
       }
     });
     

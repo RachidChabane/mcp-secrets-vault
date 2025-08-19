@@ -171,7 +171,10 @@ export const TEXT = {
   
   // Field values
   FIELD_VALUE_UNKNOWN: 'unknown',
-  FIELD_VALUE_INVALID: 'invalid'
+  FIELD_VALUE_INVALID: 'invalid',
+  
+  // Error message defaults
+  ERROR_UNKNOWN: 'Unknown error'
 } as const;
 
 export type TextKey = keyof typeof TEXT;

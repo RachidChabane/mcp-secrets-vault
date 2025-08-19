@@ -109,6 +109,10 @@ export function sanitizeUrl(url: string): string {
  */
 function isSensitiveKey(key: string): boolean {
   const lowerKey = key.toLowerCase();
+  // secretId is not sensitive - it's just an identifier
+  if (lowerKey === 'secretid' || lowerKey === 'secret_id') {
+    return false;
+  }
   return CONFIG.SENSITIVE_FIELD_NAMES.some(sensitive => 
     lowerKey === sensitive || lowerKey.includes(sensitive)
   );

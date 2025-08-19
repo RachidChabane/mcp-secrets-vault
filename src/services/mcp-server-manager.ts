@@ -163,7 +163,7 @@ export class McpServerManager {
           // Log but don't fail shutdown on handler errors
           writeError(TEXT.LOG_SHUTDOWN_HANDLER_ERROR, { 
             level: CONFIG.LOG_LEVEL_WARN,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: error instanceof Error ? error.message : TEXT.ERROR_UNKNOWN
           });
         }
       }
@@ -172,7 +172,7 @@ export class McpServerManager {
       process.exit(CONFIG.EXIT_CODE_SUCCESS);
     };
     
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    process.on(CONFIG.SIGNAL_INT, shutdown);
+    process.on(CONFIG.SIGNAL_TERM, shutdown);
   }
 }

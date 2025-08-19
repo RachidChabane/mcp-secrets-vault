@@ -34,7 +34,7 @@ export const CONFIG = {
   
   // Sanitization - Comprehensive patterns for defense in depth
   SANITIZE_AUTH_HEADER_PATTERN: /authorization/i,
-  SANITIZE_SECRET_PATTERN: /(api[_-]?key|secret|token|password|auth|bearer|credential|private[_-]?key|access[_-]?key)/i,
+  SANITIZE_SECRET_PATTERN: /\b(api[_-]?key|token|password|auth|bearer|credential|private[_-]?key|access[_-]?key)\b/i,
   SANITIZE_REPLACEMENT: '[REDACTED]',
   
   // Additional redaction patterns for security hardening
@@ -49,7 +49,7 @@ export const CONFIG = {
     /ghp_[a-zA-Z0-9]{36}/g,  // GitHub personal access tokens
     /gho_[a-zA-Z0-9]{36}/g,  // GitHub OAuth tokens
   ],
-  REDACT_ENV_VAR_PATTERN: /\b[A-Z][A-Z0-9_]*_(KEY|SECRET|TOKEN|PASSWORD|API|CREDENTIAL)\b/gi,
+  REDACT_ENV_VAR_PATTERN: /\b[A-Z][A-Z0-9_]*_(KEY|SECRET|TOKEN|PASSWORD|API|CREDENTIAL)\b/g,
   REDACT_KEY_VALUE_PATTERN: /(api[_-]?key|secret|token|password|auth|bearer|credential|private[_-]?key)\s*[:=]\s*[^\s,;}]+/gi,
   
   // Sensitive field names to always redact
@@ -92,7 +92,7 @@ export const CONFIG = {
   MIN_DOMAIN_LENGTH: 3,
   DOMAIN_REGEX: /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i,
   ACTION_REGEX: /^[a-z_]+$/,
-  URL_REGEX: /^https?:\/\/([\w\-]+\.)+[\w\-]+(\/[\w\-._~:/?#[\]@!$&'()*+,;=]*)?$/,
+  URL_REGEX: /^https?:\/\/([\w\-]+\.)+[\w\-]+(:\d+)?(\/[\w\-._~:/?#[\]@!$&'()*+,;=]*)?$/,
   HEADER_NAME_REGEX: /^[a-zA-Z0-9\-_]+$/,
   
   // File paths
@@ -200,7 +200,27 @@ export const CONFIG = {
   ZERO_COUNT: 0,
   
   // Line ending pattern
-  LINE_ENDING_PATTERN: /\r?\n/
+  LINE_ENDING_PATTERN: /\r?\n/,
+  
+  // Process signals
+  SIGNAL_INT: 'SIGINT',
+  SIGNAL_TERM: 'SIGTERM',
+  
+  // Environment variables
+  ENV_TEST_SECRET_MAPPINGS: 'TEST_SECRET_MAPPINGS',
+  
+  // URL schemes
+  FILE_URL_SCHEME: 'file://',
+  
+  // Logging patterns
+  STACK_TRACE_PATTERN: '\n    at ',
+  EMPTY_STRING_FALLBACK: '',
+  
+  // Exception field names
+  EXCEPTION_FIELD_NAMES: ['description', 'environment'] as const,
+  
+  // Sensitive key patterns for logging
+  SENSITIVE_KEY_PATTERNS: ['SECRET', 'KEY', 'TOKEN', 'PASSWORD'] as const
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG;

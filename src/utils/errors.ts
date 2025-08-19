@@ -63,13 +63,14 @@ export class ConfigurationError extends VaultError {
 
 export class SecretNotFoundError extends VaultError {
   constructor(secretId: string) {
-    // Sanitize secretId before including in context
+    // Sanitize secretId length but preserve the value for debugging
     const sanitizedId = secretId.substring(0, CONFIG.MAX_SECRET_ID_LENGTH);
     super(
       CONFIG.ERROR_CODE_UNKNOWN_SECRET,
-      TEXT.ERROR_UNKNOWN_SECRET,
-      { secretId: sanitizedId }
+      TEXT.ERROR_UNKNOWN_SECRET
     );
+    // Set context directly to avoid sanitization of secretId (it's just an identifier)
+    this.context = deepFreeze({ secretId: sanitizedId });
     this.name = 'SecretNotFoundError';
     Object.setPrototypeOf(this, SecretNotFoundError.prototype);
   }

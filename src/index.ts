@@ -21,9 +21,10 @@ async function loadMappings(): Promise<SecretMapping[]> {
   const mappings: SecretMapping[] = [];
   
   // Example: Check for test mappings in env
-  if (process.env['TEST_SECRET_MAPPINGS']) {
+  const testMappings = process.env[CONFIG.ENV_TEST_SECRET_MAPPINGS];
+  if (testMappings) {
     try {
-      return JSON.parse(process.env['TEST_SECRET_MAPPINGS']);
+      return JSON.parse(testMappings);
     } catch (error) {
       writeError(TEXT.ERROR_INVALID_CONFIG, { 
         level: CONFIG.LOG_LEVEL_ERROR,
@@ -75,7 +76,7 @@ async function main(): Promise<void> {
   await serverManager.start();
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
   main().catch(() => {
     writeError(TEXT.ERROR_INVALID_CONFIG, { 
       level: CONFIG.LOG_LEVEL_ERROR,
