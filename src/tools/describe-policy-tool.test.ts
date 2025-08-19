@@ -3,7 +3,7 @@ import { DescribePolicyTool } from './describe-policy-tool.js';
 import { PolicyProvider, PolicyConfig } from '../interfaces/policy.interface.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
-import { VaultError, ToolError } from '../utils/errors.js';
+import { ToolError } from '../utils/errors.js';
 
 describe('DescribePolicyTool', () => {
   let mockPolicyProvider: PolicyProvider;
