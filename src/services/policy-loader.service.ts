@@ -36,27 +36,21 @@ export class PolicyLoaderService implements PolicyLoader {
     }
   }
 
+  private normalizeList(items: any[]): readonly string[] {
+    if (!Array.isArray(items)) return Object.freeze([]);
+    const normalized = new Set<string>();
+    for (const item of items) {
+      const trimmed = item?.toString()?.trim()?.toLowerCase();
+      if (trimmed) normalized.add(trimmed);
+    }
+    return Object.freeze(Array.from(normalized).sort());
+  }
+
   private freezePolicy(policy: any): PolicyConfig {
-    // Normalize actions and domains: trim, lowercase, deduplicate, sort
-    const normalizeList = (items: any[]): readonly string[] => {
-      if (!Array.isArray(items)) return Object.freeze([]);
-      
-      const normalized = new Set<string>();
-      for (const item of items) {
-        const trimmed = item?.toString()?.trim()?.toLowerCase();
-        if (trimmed) {
-          normalized.add(trimmed);
-        }
-      }
-      
-      // Convert to array and sort for deterministic order
-      return Object.freeze(Array.from(normalized).sort());
-    };
-    
     const frozen: any = {
       secretId: policy.secretId?.trim(),
-      allowedActions: normalizeList(policy.allowedActions),
-      allowedDomains: normalizeList(policy.allowedDomains),
+      allowedActions: this.normalizeList(policy.allowedActions),
+      allowedDomains: this.normalizeList(policy.allowedDomains),
     };
     
     if (policy.rateLimit) {
@@ -65,11 +59,7 @@ export class PolicyLoaderService implements PolicyLoader {
         windowSeconds: policy.rateLimit.windowSeconds
       });
     }
-    
-    if (policy.expiresAt) {
-      frozen.expiresAt = policy.expiresAt?.trim();
-    }
-    
+    if (policy.expiresAt) frozen.expiresAt = policy.expiresAt?.trim();
     return Object.freeze(frozen) as PolicyConfig;
   }
 }

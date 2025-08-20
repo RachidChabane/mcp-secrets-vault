@@ -2,6 +2,7 @@
 
 import { CONFIG } from './constants/config-constants.js';
 import { TEXT } from './constants/text-constants.js';
+import { fmt } from './utils/format.js';
 import { EnvSecretProvider } from './services/env-secret-provider.js';
 import { PolicyProviderService } from './services/policy-provider.service.js';
 import { HttpActionExecutor } from './services/http-action-executor.service.js';
@@ -21,10 +22,13 @@ async function loadConfiguration() {
   
   try {
     const config = await configLoader.loadConfig();
-    writeInfo(`Configuration loaded: ${config.mappings.length} mappings, ${config.policies.length} policies`);
+    writeInfo(fmt(TEXT.INDEX_CONFIG_LOADED, { 
+      mappings: config.mappings.length, 
+      policies: config.policies.length 
+    }));
     return config;
   } catch (error: any) {
-    writeError(`Failed to load configuration: ${error.message}`, {
+    writeError(fmt(TEXT.INDEX_CONFIG_LOAD_FAILED, { error: error.message }), {
       level: CONFIG.LOG_LEVEL_ERROR,
       code: CONFIG.ERROR_CODE_INVALID_REQUEST
     });
@@ -32,13 +36,7 @@ async function loadConfiguration() {
   }
 }
 
-async function createServices(config: Awaited<ReturnType<typeof loadConfiguration>>) {
-  const secretProvider = new EnvSecretProvider(config.mappings);
-  const policyProvider = new PolicyProviderService();
-  const actionExecutor = new HttpActionExecutor();
-  const rateLimiter = new RateLimiterService();
-  
-  // Initialize audit service with config settings
+async function initializeAuditService(config: Awaited<ReturnType<typeof loadConfiguration>>) {
   const auditService = new JsonlAuditService(
     config.settings?.auditDir || CONFIG.DEFAULT_AUDIT_DIR,
     {
@@ -46,20 +44,24 @@ async function createServices(config: Awaited<ReturnType<typeof loadConfiguratio
       maxAgeDays: config.settings?.maxFileAgeDays
     }
   );
-  
   await auditService.initialize();
+  return auditService;
+}
+
+async function createServices(config: Awaited<ReturnType<typeof loadConfiguration>>) {
+  const secretProvider = new EnvSecretProvider(config.mappings);
+  const policyProvider = new PolicyProviderService();
+  const actionExecutor = new HttpActionExecutor();
+  const rateLimiter = new RateLimiterService();
+  const auditService = await initializeAuditService(config);
   
-  // Load policies from config instead of file
   await policyProvider.loadPoliciesFromConfig(config.policies);
-  
-  // Set default rate limit if provided
   if (config.settings?.defaultRateLimit) {
     rateLimiter.setDefaultLimit(
       config.settings.defaultRateLimit.requests,
       config.settings.defaultRateLimit.windowSeconds
     );
   }
-  
   return { secretProvider, policyProvider, actionExecutor, rateLimiter, auditService };
 }
 
@@ -90,7 +92,7 @@ async function main(): Promise<void> {
     
     await serverManager.start();
   } catch (error) {
-    writeError('Failed to start server', {
+    writeError(TEXT.INDEX_SERVER_START_FAILED, {
       level: CONFIG.LOG_LEVEL_ERROR,
       code: CONFIG.ERROR_CODE_INVALID_REQUEST
     });
@@ -99,13 +101,30 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
-  main().catch(() => {
-    writeError(TEXT.ERROR_INVALID_CONFIG, { 
-      level: CONFIG.LOG_LEVEL_ERROR,
-      code: CONFIG.ERROR_CODE_INVALID_REQUEST
+  // Check if running doctor command
+  const args = process.argv.slice(2);
+  if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
+    // Import and run doctor CLI
+    import('./cli/doctor.js').then(({ DoctorCLI }) => {
+      const doctor = new DoctorCLI(args[1]);
+      return doctor.run();
+    }).catch(() => {
+      writeError(TEXT.DOCTOR_CLI_FAILED, {
+        level: CONFIG.LOG_LEVEL_ERROR,
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST
+      });
+      process.exit(CONFIG.EXIT_CODE_ERROR);
     });
-    process.exit(CONFIG.EXIT_CODE_ERROR);
-  });
+  } else {
+    // Run MCP server normally
+    main().catch(() => {
+      writeError(TEXT.ERROR_INVALID_CONFIG, { 
+        level: CONFIG.LOG_LEVEL_ERROR,
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST
+      });
+      process.exit(CONFIG.EXIT_CODE_ERROR);
+    });
+  }
 }
 
 export { main };

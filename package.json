@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "generate:schema": "tsx scripts/generate-schema.ts",
-    "validate:config": "tsx src/cli/validate-config.ts"
+    "validate:config": "tsx src/cli/validate-config.ts",
+    "doctor": "tsx src/index.ts doctor"
   },
   "keywords": [
     "mcp",

@@ -4,16 +4,18 @@ import { promises as fs } from 'fs';
 import { ConfigLoaderService } from '../services/config-loader.service.js';
 import { ConfigValidatorService } from '../services/config-validator.service.js';
 import { CONFIG } from '../constants/config-constants.js';
+import { TEXT } from '../constants/text-constants.js';
+import { fmt } from '../utils/format.js';
 
-// ANSI color codes for terminal output
+// Use centralized color codes
 const colors = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  cyan: '\x1b[36m',
-  gray: '\x1b[90m'
+  reset: CONFIG.ANSI_RESET,
+  red: CONFIG.ANSI_RED,
+  green: CONFIG.ANSI_GREEN,
+  yellow: CONFIG.ANSI_YELLOW,
+  blue: CONFIG.ANSI_BLUE,
+  cyan: CONFIG.ANSI_CYAN,
+  gray: CONFIG.ANSI_GRAY
 };
 
 // Format message with color
@@ -23,9 +25,9 @@ function colorize(text: string, color: keyof typeof colors): string {
 
 // Print section header
 function printHeader(title: string): void {
-  console.log(`\n${colorize('═'.repeat(60), 'blue')}`);
+  console.log(`\n${colorize(CONFIG.CLI_SEPARATOR_LINE, 'blue')}`);
   console.log(colorize(`  ${title}`, 'cyan'));
-  console.log(`${colorize('═'.repeat(60), 'blue')}\n`);
+  console.log(`${colorize(CONFIG.CLI_SEPARATOR_LINE, 'blue')}\n`);
 }
 
 // Print validation result
@@ -38,24 +40,18 @@ function printResult(label: string, value: string | number, indent = 0): void {
 async function validateConfig(configPath?: string): Promise<void> {
   const filePath = configPath || CONFIG.DEFAULT_CONFIG_FILE;
   
-  printHeader('MCP Secrets Vault - Configuration Validator');
-  console.log(`Validating: ${colorize(filePath, 'yellow')}`);
+  printHeader(TEXT.VALIDATE_CONFIG_HEADER);
+  console.log(`${TEXT.VALIDATE_CONFIG_VALIDATING} ${colorize(filePath, 'yellow')}`);
   
   try {
     // Check if file exists
     try {
       await fs.access(filePath);
-      console.log(`✅ ${colorize('File exists', 'green')}`);
+      console.log(`${TEXT.CLI_ICON_SUCCESS} ${colorize(TEXT.VALIDATE_CONFIG_FILE_EXISTS, 'green')}`);
     } catch {
-      console.log(`❌ ${colorize('File not found', 'red')}`);
-      console.log(`\n${colorize('Tip:', 'yellow')} Create a vault.config.json file with the following structure:`);
-      console.log(colorize(`
-{
-  "version": "1.0.0",
-  "mappings": [],
-  "policies": [],
-  "settings": {}
-}`, 'gray'));
+      console.log(`${TEXT.CLI_ICON_ERROR} ${colorize(TEXT.VALIDATE_CONFIG_FILE_NOT_FOUND, 'red')}`);
+      console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_CREATE_TIP, 'yellow')} ${TEXT.VALIDATE_CONFIG_CREATE_FILE_MSG}`);
+      console.log(colorize(TEXT.VALIDATE_CONFIG_JSON_EXAMPLE, 'gray'));
       process.exit(CONFIG.EXIT_CODE_INVALID_CONFIG);
     }
     
@@ -63,24 +59,24 @@ async function validateConfig(configPath?: string): Promise<void> {
     const loader = new ConfigLoaderService(filePath);
     const validator = new ConfigValidatorService();
     
-    console.log(`\n${colorize('Loading configuration...', 'blue')}`);
+    console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_LOADING, 'blue')}`);
     const config = await loader.loadConfig();
     
     // Validate structure
-    console.log(`${colorize('Validating structure...', 'blue')}`);
+    console.log(`${colorize(TEXT.VALIDATE_CONFIG_VALIDATING_STRUCTURE, 'blue')}`);
     validator.validate(config);
-    console.log(`✅ ${colorize('Configuration structure is valid', 'green')}`);
+    console.log(`${TEXT.CLI_ICON_SUCCESS} ${colorize(TEXT.VALIDATE_CONFIG_STRUCTURE_VALID, 'green')}`);
     
     // Display configuration summary
-    printHeader('Configuration Summary');
+    printHeader(TEXT.VALIDATE_CONFIG_SUMMARY_HEADER);
     
-    printResult('Version', config.version);
-    printResult('Mappings', config.mappings.length.toString());
-    printResult('Policies', config.policies.length.toString());
+    printResult(TEXT.VALIDATE_CONFIG_VERSION_LABEL, config.version);
+    printResult(TEXT.VALIDATE_CONFIG_MAPPINGS_LABEL, config.mappings.length.toString());
+    printResult(TEXT.VALIDATE_CONFIG_POLICIES_LABEL, config.policies.length.toString());
     
     // Validate and display mappings
     if (config.mappings.length > 0) {
-      console.log(`\n${colorize('Secret Mappings:', 'cyan')}`);
+      console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_SECRET_MAPPINGS_HEADER, 'cyan')}`);
       for (const mapping of config.mappings) {
         console.log(`  • ${mapping.secretId} → ${colorize(mapping.envVar, 'yellow')}`);
         if (mapping.description) {
@@ -91,83 +87,89 @@ async function validateConfig(configPath?: string): Promise<void> {
     
     // Validate and display policies
     if (config.policies.length > 0) {
-      console.log(`\n${colorize('Access Policies:', 'cyan')}`);
+      console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_ACCESS_POLICIES_HEADER, 'cyan')}`);
       for (const policy of config.policies) {
         console.log(`  • ${colorize(policy.secretId, 'yellow')}`);
-        console.log(`    Actions: ${policy.allowedActions.join(', ')}`);
-        console.log(`    Domains: ${policy.allowedDomains.length} exact FQDNs`);
+        console.log(`    ${TEXT.VALIDATE_CONFIG_ACTIONS_LABEL} ${policy.allowedActions.join(', ')}`);
+        console.log(`    ${TEXT.VALIDATE_CONFIG_DOMAINS_LABEL} ${policy.allowedDomains.length} ${TEXT.VALIDATE_CONFIG_EXACT_FQDNS_SUFFIX}`);
         
         // Validate each domain explicitly
         for (const domain of policy.allowedDomains) {
           try {
             validator.validateDomain(domain);
-            console.log(`      ✅ ${domain}`);
+            console.log(`      ${TEXT.CLI_ICON_SUCCESS} ${domain}`);
           } catch (error: any) {
-            console.log(`      ❌ ${domain} - ${colorize(error.message, 'red')}`);
+            console.log(`      ${TEXT.CLI_ICON_ERROR} ${domain} - ${colorize(error.message, 'red')}`);
           }
         }
         
         if (policy.rateLimit) {
-          console.log(`    Rate Limit: ${policy.rateLimit.requests} requests per ${policy.rateLimit.windowSeconds}s`);
+          const rateLimitText = fmt(TEXT.VALIDATE_CONFIG_RATE_LIMIT_FORMAT, {
+            requests: policy.rateLimit.requests,
+            windowSeconds: policy.rateLimit.windowSeconds
+          });
+          console.log(`    ${TEXT.VALIDATE_CONFIG_RATE_LIMIT_LABEL} ${rateLimitText}`);
         }
         if (policy.expiresAt) {
-          console.log(`    Expires: ${policy.expiresAt}`);
+          console.log(`    ${TEXT.VALIDATE_CONFIG_EXPIRES_LABEL} ${policy.expiresAt}`);
         }
       }
     }
     
     // Check for duplicate secret IDs
-    console.log(`\n${colorize('Checking for duplicates...', 'blue')}`);
+    console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_CHECKING_DUPLICATES, 'blue')}`);
     validator.checkDuplicateSecretIds(config.mappings, config.policies);
-    console.log(`✅ ${colorize('No duplicate secret IDs found', 'green')}`);
+    console.log(`${TEXT.CLI_ICON_SUCCESS} ${colorize(TEXT.VALIDATE_CONFIG_NO_DUPLICATES, 'green')}`);
     
     // Display settings
     if (config.settings) {
-      console.log(`\n${colorize('Settings:', 'cyan')}`);
+      console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_SETTINGS_HEADER, 'cyan')}`);
       if (config.settings.auditDir) {
-        printResult('Audit Directory', config.settings.auditDir, 2);
+        printResult(TEXT.VALIDATE_CONFIG_AUDIT_DIR_LABEL, config.settings.auditDir, 2);
       }
       if (config.settings.maxFileSizeMb) {
-        printResult('Max File Size', `${config.settings.maxFileSizeMb} MB`, 2);
+        printResult(TEXT.VALIDATE_CONFIG_MAX_FILE_SIZE_LABEL, `${config.settings.maxFileSizeMb} ${TEXT.VALIDATE_CONFIG_MAX_FILE_SIZE_SUFFIX}`, 2);
       }
       if (config.settings.maxFileAgeDays) {
-        printResult('Max File Age', `${config.settings.maxFileAgeDays} days`, 2);
+        printResult(TEXT.VALIDATE_CONFIG_MAX_FILE_AGE_LABEL, `${config.settings.maxFileAgeDays} ${TEXT.VALIDATE_CONFIG_MAX_FILE_AGE_SUFFIX}`, 2);
       }
       if (config.settings.defaultRateLimit) {
-        printResult('Default Rate Limit', 
-          `${config.settings.defaultRateLimit.requests} requests per ${config.settings.defaultRateLimit.windowSeconds}s`, 
-          2);
+        const rateLimitText = fmt(TEXT.VALIDATE_CONFIG_RATE_LIMIT_FORMAT, {
+          requests: config.settings.defaultRateLimit.requests,
+          windowSeconds: config.settings.defaultRateLimit.windowSeconds
+        });
+        printResult(TEXT.VALIDATE_CONFIG_DEFAULT_RATE_LIMIT_LABEL, rateLimitText, 2);
       }
     }
     
     // Important reminders
-    printHeader('Security Notes');
-    console.log(`${colorize('⚠️  Important:', 'yellow')}`);
-    console.log('  • All domains must be exact FQDNs (no wildcards)');
-    console.log('  • Environment variables are NOT checked by this validator');
-    console.log('  • Use the doctor CLI (Task-17) to verify environment setup');
-    console.log('  • Configuration follows deny-by-default security posture');
+    printHeader(TEXT.VALIDATE_CONFIG_SECURITY_NOTES_HEADER);
+    console.log(`${TEXT.VALIDATE_CONFIG_IMPORTANT_LABEL}`);
+    console.log(`  ${TEXT.VALIDATE_CONFIG_NOTE_EXACT_FQDNS}`);
+    console.log(`  ${TEXT.VALIDATE_CONFIG_NOTE_ENV_NOT_CHECKED}`);
+    console.log(`  ${TEXT.VALIDATE_CONFIG_NOTE_USE_DOCTOR}`);
+    console.log(`  ${TEXT.VALIDATE_CONFIG_NOTE_DENY_BY_DEFAULT}`);
     
     // Success message
-    console.log(`\n${colorize('━'.repeat(60), 'green')}`);
-    console.log(`✅ ${colorize('Configuration is valid!', 'green')}`);
-    console.log(`${colorize('━'.repeat(60), 'green')}\n`);
+    console.log(`\n${colorize(CONFIG.CLI_SEPARATOR_LINE_THIN, 'green')}`);
+    console.log(`${TEXT.CLI_ICON_SUCCESS} ${colorize(TEXT.VALIDATE_CONFIG_SUCCESS, 'green')}`);
+    console.log(`${colorize(CONFIG.CLI_SEPARATOR_LINE_THIN, 'green')}\n`);
     
     process.exit(CONFIG.EXIT_CODE_SUCCESS);
     
   } catch (error: any) {
-    console.error(`\n❌ ${colorize('Validation failed:', 'red')}`);
+    console.error(`\n${TEXT.CLI_ICON_ERROR} ${colorize(TEXT.VALIDATE_CONFIG_VALIDATION_FAILED, 'red')}`);
     console.error(colorize(error.message, 'red'));
     
     // Provide helpful tips based on error
     if (error.message.includes('Wildcards not allowed')) {
-      console.log(`\n${colorize('Tip:', 'yellow')} List each domain explicitly. For example:`);
-      console.log(colorize('  Instead of: "*.example.com"', 'gray'));
-      console.log(colorize('  Use: ["api.example.com", "www.example.com", "app.example.com"]', 'gray'));
+      console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_CREATE_TIP, 'yellow')} ${TEXT.VALIDATE_CONFIG_WILDCARDS_TIP}`);
+      console.log(colorize(`  ${TEXT.VALIDATE_CONFIG_WILDCARDS_INSTEAD_OF}`, 'gray'));
+      console.log(colorize(`  ${TEXT.VALIDATE_CONFIG_WILDCARDS_USE}`, 'gray'));
     }
     
     if (error.message.includes('Invalid JSON')) {
-      console.log(`\n${colorize('Tip:', 'yellow')} Check your JSON syntax with a JSON validator`);
+      console.log(`\n${colorize(TEXT.VALIDATE_CONFIG_CREATE_TIP, 'yellow')} ${TEXT.VALIDATE_CONFIG_JSON_TIP}`);
     }
     
     process.exit(CONFIG.EXIT_CODE_INVALID_CONFIG);
@@ -175,27 +177,27 @@ async function validateConfig(configPath?: string): Promise<void> {
 }
 
 // Parse command line arguments
-const args = process.argv.slice(2);
+const args = process.argv.slice(CONFIG.PROCESS_ARGV_FILE_INDEX + 1);
 const configPath = args[0];
 
-if (args.includes('--help') || args.includes('-h')) {
+if (args.includes(CONFIG.CLI_ARG_HELP_LONG) || args.includes(CONFIG.CLI_ARG_HELP_SHORT)) {
   console.log(`
-${colorize('MCP Secrets Vault - Configuration Validator', 'cyan')}
+${colorize(TEXT.VALIDATE_CONFIG_HELP_HEADER, 'cyan')}
 
-${colorize('Usage:', 'yellow')}
-  validate-config [config-file]
+${colorize(TEXT.VALIDATE_CONFIG_HELP_USAGE_LABEL, 'yellow')}
+  ${TEXT.VALIDATE_CONFIG_HELP_USAGE}
 
-${colorize('Arguments:', 'yellow')}
-  config-file    Path to configuration file (default: vault.config.json)
+${colorize(TEXT.VALIDATE_CONFIG_HELP_ARGUMENTS_LABEL, 'yellow')}
+  ${TEXT.VALIDATE_CONFIG_HELP_CONFIG_FILE}
 
-${colorize('Examples:', 'yellow')}
-  validate-config                    # Validate default vault.config.json
-  validate-config my-config.json     # Validate specific file
-  validate-config --help             # Show this help message
+${colorize(TEXT.VALIDATE_CONFIG_HELP_EXAMPLES_LABEL, 'yellow')}
+  ${TEXT.VALIDATE_CONFIG_HELP_EXAMPLE_DEFAULT}
+  ${TEXT.VALIDATE_CONFIG_HELP_EXAMPLE_CUSTOM}
+  ${TEXT.VALIDATE_CONFIG_HELP_EXAMPLE_HELP}
 
-${colorize('Exit Codes:', 'yellow')}
-  0    Configuration is valid
-  2    Configuration is invalid
+${colorize(TEXT.VALIDATE_CONFIG_HELP_EXIT_CODES_LABEL, 'yellow')}
+  ${TEXT.VALIDATE_CONFIG_HELP_EXIT_0}
+  ${TEXT.VALIDATE_CONFIG_HELP_EXIT_2}
 `);
   process.exit(CONFIG.EXIT_CODE_SUCCESS);
 }

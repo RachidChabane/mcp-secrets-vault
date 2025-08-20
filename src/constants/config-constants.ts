@@ -52,31 +52,6 @@ export const CONFIG = {
   REDACT_ENV_VAR_PATTERN: /\b[A-Z][A-Z0-9_]*_(KEY|SECRET|TOKEN|PASSWORD|API|CREDENTIAL)\b/g,
   REDACT_KEY_VALUE_PATTERN: /(api[_-]?key|secret|token|password|auth|bearer|credential|private[_-]?key)\s*[:=]\s*[^\s,;}]+/gi,
   
-  // Sensitive field names to always redact
-  SENSITIVE_FIELD_NAMES: [
-    'envvar',
-    'env',
-    'secret',
-    'password',
-    'token',
-    'auth',
-    'authorization',
-    'bearer',
-    'apikey',
-    'api_key',
-    'api-key',
-    'secretvalue',
-    'secret_value',
-    'credential',
-    'credentials',
-    'private_key',
-    'privatekey',
-    'access_key',
-    'accesskey',
-    'client_secret',
-    'clientsecret'
-  ],
-  
   // Validation
   MAX_SECRET_ID_LENGTH: 100,
   MAX_DOMAIN_LENGTH: 253,
@@ -206,6 +181,9 @@ export const CONFIG = {
   SIGNAL_INT: 'SIGINT',
   SIGNAL_TERM: 'SIGTERM',
   
+  // Process arguments
+  PROCESS_ARGV_FILE_INDEX: 1,
+  
   // Environment variables
   ENV_TEST_SECRET_MAPPINGS: 'TEST_SECRET_MAPPINGS',
   
@@ -227,7 +205,66 @@ export const CONFIG = {
   JSON_SCHEMA_ID_PREFIX: 'mcp-secrets-vault',
   JSON_SCHEMA_VERSION: 'v1.0.0',
   JSON_SCHEMA_FILENAME: 'vault.config.schema.json',
-  JSON_SCHEMA_NAME: 'VaultConfig'
+  JSON_SCHEMA_NAME: 'VaultConfig',
+  
+  // ANSI color codes for terminal output
+  ANSI_RESET: '\x1b[0m',
+  ANSI_RED: '\x1b[31m',
+  ANSI_GREEN: '\x1b[32m',
+  ANSI_YELLOW: '\x1b[33m',
+  ANSI_BLUE: '\x1b[34m',
+  ANSI_CYAN: '\x1b[36m',
+  ANSI_GRAY: '\x1b[90m',
+  
+  // CLI formatting
+  CLI_SEPARATOR_LINE: '═'.repeat(60),
+  CLI_SEPARATOR_LINE_THIN: '━'.repeat(60),
+  
+  // CLI status values  
+  CLI_STATUS_OK: 'OK' as const,
+  CLI_STATUS_WARN: 'WARN' as const,
+  CLI_STATUS_ERROR: 'ERROR' as const,
+  
+  // CLI arguments
+  CLI_ARG_HELP_LONG: '--help' as const,
+  CLI_ARG_HELP_SHORT: '-h' as const,
+  
+  // Content types
+  CONTENT_TYPE_JSON: 'application/json',
+  
+  // File encoding
+  UTF8_ENCODING: 'utf-8' as const,
+  
+  // JSON formatting
+  JSON_INDENT_SIZE: 2,
+  
+  // Zod schema configuration
+  ZOD_REF_STRATEGY_NONE: 'none' as const,
+  
+  // Redaction patterns for logging
+  REDACT_ENV_PATTERN: /\b[A-Z][A-Z0-9_]*_(PASSWORD|SECRET|KEY|TOKEN|CREDENTIAL|API)\b/g,
+  REDACT_GENERIC_TOKEN: /\b[a-zA-Z0-9_-]{32,}\b/g,
+  REDACT_CONTROL_CHARS: /[\x00-\x1F\x7F]/g,
+  
+  // Sensitive field names for logging
+  SENSITIVE_FIELD_NAMES: [
+    'password', 'secret', 'token', 'key', 'auth', 'authorization',
+    'apikey', 'api_key', 'access_token', 'refresh_token', 'private_key',
+    'client_secret', 'webhook_secret', 'signing_key', 'encryption_key',
+    'database_url', 'connection_string', 'env', 'envvar', 'environment'
+  ] as const,
+  
+  // Doctor CLI thresholds
+  DOCTOR_RATE_LIMIT_MIN_REQUESTS: 10,
+  DOCTOR_RATE_LIMIT_MAX_REQUESTS: 10000,
+  DOCTOR_RATE_LIMIT_MIN_WINDOW: 60,
+  DOCTOR_RATE_LIMIT_MAX_WINDOW: 86400,
+  DOCTOR_FILE_SIZE_WARN_MB: 500,
+  DOCTOR_FILE_AGE_WARN_DAYS: 90,
+  DOCTOR_POLICY_EXPIRING_SOON_DAYS: 7,
+  DOCTOR_MIN_DOMAIN_COUNT: 1,
+  DOCTOR_MAX_DOMAIN_COUNT: 100,
+  DOCTOR_SUSPICIOUS_DOMAIN_PATTERNS: ['localhost', '127.0.0.1', '0.0.0.0', 'test.com', 'example.com'] as const
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG;
