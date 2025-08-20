@@ -43,7 +43,19 @@ describe('Text Constants', () => {
       'action',    // Used by FIELD_ACTION and in SCHEMA_REQUIRED_USE_SECRET array
       'Invalid action format',  // Used by ERROR_INVALID_ACTION and ERROR_INVALID_ACTION_FORMAT
       'Invalid domain format',  // Used by ERROR_INVALID_DOMAIN and ERROR_INVALID_DOMAIN_FORMAT
-      'Invalid URL format'      // Used by ERROR_INVALID_URL and ERROR_INVALID_URL_FORMAT
+      'Invalid URL format',     // Used by ERROR_INVALID_URL and ERROR_INVALID_URL_FORMAT
+      'MCP Secrets Vault - Configuration Validator', // Used as header in validate-config
+      'Usage:',                // Used in help text for both CLIs
+      'Arguments:',            // Used in help text for both CLIs  
+      'Examples:',             // Used in help text for both CLIs
+      'Exit Codes:',           // Used in help text for both CLIs
+      'File not found',        // Used in doctor diagnostics and validate-config
+      'Audit Directory',       // Used in both doctor and validate-config CLIs
+      'config-file    Path to configuration file (default: vault.config.json)', // Used in help text
+      'Configuration structure is valid', // Used in multiple contexts
+      'File exists',           // Used in validation checks
+      'Loading configuration...', // Used in multiple CLIs
+      'Validating structure...' // Used in validation process
     ];
     
     const expectedDuplicates = flattenedValues.filter(value => 

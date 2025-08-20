@@ -14,7 +14,7 @@ async function generateJsonSchema(): Promise<void> {
     // Generate JSON Schema from Zod schema
     const jsonSchema = zodToJsonSchema(VaultConfigSchema, {
       name: getSchemaName(),
-      $refStrategy: 'none',
+      $refStrategy: CONFIG.ZOD_REF_STRATEGY_NONE,
       errorMessages: true,
       markdownDescription: true,
     });
@@ -47,8 +47,8 @@ async function generateJsonSchema(): Promise<void> {
     const outputPath = path.join(process.cwd(), CONFIG.JSON_SCHEMA_FILENAME);
     await fs.writeFile(
       outputPath,
-      JSON.stringify(schemaWithMetadata, null, 2),
-      'utf-8'
+      JSON.stringify(schemaWithMetadata, null, CONFIG.JSON_INDENT_SIZE),
+      CONFIG.UTF8_ENCODING
     );
 
     writeInfo(`${TEXT.SCHEMA_GENERATION_SUCCESS}: ${outputPath}`);
@@ -64,7 +64,7 @@ async function generateJsonSchema(): Promise<void> {
 }
 
 // Run if executed directly
-if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
+if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[CONFIG.PROCESS_ARGV_FILE_INDEX]}`) {
   generateJsonSchema();
 }
 

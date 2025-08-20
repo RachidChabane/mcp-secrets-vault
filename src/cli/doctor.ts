@@ -20,7 +20,7 @@ const colors = {
 
 interface DiagnosticResult {
   check: string;
-  status: 'OK' | 'WARN' | 'ERROR';
+  status: typeof CONFIG.CLI_STATUS_OK | typeof CONFIG.CLI_STATUS_WARN | typeof CONFIG.CLI_STATUS_ERROR;
   message: string;
   details?: string[];
 }
@@ -46,10 +46,10 @@ function printHeader(title: string): void {
 
 // Print diagnostic result
 function printResult(result: DiagnosticResult): void {
-  const statusColor = result.status === 'OK' ? 'green' : 
-                      result.status === 'WARN' ? 'yellow' : 'red';
-  const statusIcon = result.status === 'OK' ? TEXT.CLI_ICON_SUCCESS : 
-                     result.status === 'WARN' ? TEXT.CLI_ICON_WARNING : TEXT.CLI_ICON_ERROR;
+  const statusColor = result.status === CONFIG.CLI_STATUS_OK ? 'green' : 
+                      result.status === CONFIG.CLI_STATUS_WARN ? 'yellow' : 'red';
+  const statusIcon = result.status === CONFIG.CLI_STATUS_OK ? TEXT.CLI_ICON_SUCCESS : 
+                     result.status === CONFIG.CLI_STATUS_WARN ? TEXT.CLI_ICON_WARNING : TEXT.CLI_ICON_ERROR;
   
   console.log(`${statusIcon} ${colorize(result.status, statusColor)} - ${result.check}`);
   console.log(`  ${colorize(result.message, 'gray')}`);
@@ -108,7 +108,7 @@ export class DoctorCLI {
       
       this.results.push({
         check: TEXT.DOCTOR_CHECK_CONFIG_SCHEMA,
-        status: 'OK',
+        status: CONFIG.CLI_STATUS_OK,
         message: TEXT.DOCTOR_CONFIG_VALID,
         details: [
           fmt(TEXT.DOCTOR_VERSION_INFO, { version: config.version }),
@@ -120,14 +120,14 @@ export class DoctorCLI {
       if (error.code === CONFIG.FS_ERROR_ENOENT) {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_CONFIG_SCHEMA,
-          status: 'ERROR',
+          status: CONFIG.CLI_STATUS_ERROR,
           message: TEXT.DOCTOR_CONFIG_NOT_FOUND,
           details: [fmt(TEXT.DOCTOR_FILE_NOT_FOUND, { path: this.configPath })]
         });
       } else {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_CONFIG_SCHEMA,
-          status: 'ERROR',
+          status: CONFIG.CLI_STATUS_ERROR,
           message: TEXT.DOCTOR_CONFIG_INVALID,
           details: [error.message]
         });
@@ -156,21 +156,21 @@ export class DoctorCLI {
       if (missingVars.length === 0) {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_ENV_VARS,
-          status: 'OK',
+          status: CONFIG.CLI_STATUS_OK,
           message: fmt(TEXT.DOCTOR_ENV_ALL_SET, { count: setVars.length }),
           details: setVars
         });
       } else if (missingVars.length < config.mappings.length) {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_ENV_VARS,
-          status: 'WARN',
+          status: CONFIG.CLI_STATUS_WARN,
           message: TEXT.DOCTOR_SECRET_NOT_IN_ENV,
           details: missingVars
         });
       } else {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_ENV_VARS,
-          status: 'ERROR',
+          status: CONFIG.CLI_STATUS_ERROR,
           message: TEXT.DOCTOR_ENV_NONE_SET,
           details: missingVars
         });
@@ -218,14 +218,14 @@ export class DoctorCLI {
       if (domainIssues.length === 0) {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_DOMAINS,
-          status: 'OK',
+          status: CONFIG.CLI_STATUS_OK,
           message: TEXT.DOCTOR_DOMAIN_VALID,
           details: [fmt(TEXT.DOCTOR_DOMAIN_COUNT_INFO, { count: allDomains.size })]
         });
       } else {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_DOMAINS,
-          status: 'WARN',
+          status: CONFIG.CLI_STATUS_WARN,
           message: TEXT.DOCTOR_DOMAIN_HAS_ISSUES,
           details: domainIssues
         });
@@ -266,13 +266,13 @@ export class DoctorCLI {
       if (limitIssues.length === 0) {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_RATE_LIMITS,
-          status: 'OK',
+          status: CONFIG.CLI_STATUS_OK,
           message: TEXT.DOCTOR_LIMIT_REASONABLE
         });
       } else {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_RATE_LIMITS,
-          status: 'WARN',
+          status: CONFIG.CLI_STATUS_WARN,
           message: TEXT.DOCTOR_LIMITS_NEED_ADJUSTMENT,
           details: limitIssues
         });
@@ -302,14 +302,14 @@ export class DoctorCLI {
         if (warnings.length > 0) {
           this.results.push({
             check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
-            status: 'WARN',
+            status: CONFIG.CLI_STATUS_WARN,
             message: TEXT.DOCTOR_AUDIT_WRITABLE_WITH_WARNINGS,
             details: warnings
           });
         } else {
           this.results.push({
             check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
-            status: 'OK',
+            status: CONFIG.CLI_STATUS_OK,
             message: fmt(TEXT.DOCTOR_AUDIT_WRITABLE, { path: auditDir })
           });
         }
@@ -319,14 +319,14 @@ export class DoctorCLI {
           await fs.mkdir(auditDir, { recursive: true });
           this.results.push({
             check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
-            status: 'OK',
+            status: CONFIG.CLI_STATUS_OK,
             message: TEXT.DOCTOR_AUDIT_DIR_CREATED,
             details: [`Created: ${auditDir}`]
           });
         } catch (error: any) {
           this.results.push({
             check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
-            status: 'ERROR',
+            status: CONFIG.CLI_STATUS_ERROR,
             message: TEXT.DOCTOR_AUDIT_DIR_NOT_WRITABLE,
             details: [error.message]
           });
@@ -376,7 +376,7 @@ export class DoctorCLI {
       if (expirationIssues.length === 0) {
         this.results.push({
           check: TEXT.DOCTOR_CHECK_POLICY_STATUS,
-          status: 'OK',
+          status: CONFIG.CLI_STATUS_OK,
           message: TEXT.DOCTOR_POLICIES_ALL_VALID
         });
       } else {
@@ -387,7 +387,7 @@ export class DoctorCLI {
         
         this.results.push({
           check: TEXT.DOCTOR_CHECK_POLICY_STATUS,
-          status: hasErrors ? 'ERROR' : 'WARN',
+          status: hasErrors ? CONFIG.CLI_STATUS_ERROR : CONFIG.CLI_STATUS_WARN,
           message: TEXT.DOCTOR_POLICIES_NEED_ATTENTION,
           details: expirationIssues
         });
@@ -400,9 +400,9 @@ export class DoctorCLI {
   private getSummary(): DiagnosticSummary {
     return {
       total: this.results.length,
-      passed: this.results.filter(r => r.status === 'OK').length,
-      warnings: this.results.filter(r => r.status === 'WARN').length,
-      errors: this.results.filter(r => r.status === 'ERROR').length
+      passed: this.results.filter(r => r.status === CONFIG.CLI_STATUS_OK).length,
+      warnings: this.results.filter(r => r.status === CONFIG.CLI_STATUS_WARN).length,
+      errors: this.results.filter(r => r.status === CONFIG.CLI_STATUS_ERROR).length
     };
   }
   
@@ -433,10 +433,10 @@ export class DoctorCLI {
 }
 
 // Parse command line arguments
-const args = process.argv.slice(2);
+const args = process.argv.slice(CONFIG.PROCESS_ARGV_FILE_INDEX + 1);
 const configPath = args[0];
 
-if (args.includes('--help') || args.includes('-h')) {
+if (args.includes(CONFIG.CLI_ARG_HELP_LONG) || args.includes(CONFIG.CLI_ARG_HELP_SHORT)) {
   console.log(`
 ${colorize(TEXT.DOCTOR_HELP_HEADER, 'cyan')}
 
@@ -465,7 +465,7 @@ ${colorize(TEXT.DOCTOR_HELP_CHECKS, 'yellow')}
 }
 
 // Run diagnostics if executed directly
-if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
+if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[CONFIG.PROCESS_ARGV_FILE_INDEX]}`) {
   const doctor = new DoctorCLI(configPath);
   doctor.run().catch((error) => {
     console.error(`\n${TEXT.CLI_ICON_ERROR} ${colorize(TEXT.DOCTOR_FATAL_ERROR, 'red')}`);

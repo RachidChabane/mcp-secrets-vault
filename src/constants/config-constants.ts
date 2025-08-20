@@ -181,6 +181,9 @@ export const CONFIG = {
   SIGNAL_INT: 'SIGINT',
   SIGNAL_TERM: 'SIGTERM',
   
+  // Process arguments
+  PROCESS_ARGV_FILE_INDEX: 1,
+  
   // Environment variables
   ENV_TEST_SECRET_MAPPINGS: 'TEST_SECRET_MAPPINGS',
   
@@ -217,8 +220,26 @@ export const CONFIG = {
   CLI_SEPARATOR_LINE: '═'.repeat(60),
   CLI_SEPARATOR_LINE_THIN: '━'.repeat(60),
   
+  // CLI status values  
+  CLI_STATUS_OK: 'OK' as const,
+  CLI_STATUS_WARN: 'WARN' as const,
+  CLI_STATUS_ERROR: 'ERROR' as const,
+  
+  // CLI arguments
+  CLI_ARG_HELP_LONG: '--help' as const,
+  CLI_ARG_HELP_SHORT: '-h' as const,
+  
   // Content types
   CONTENT_TYPE_JSON: 'application/json',
+  
+  // File encoding
+  UTF8_ENCODING: 'utf-8' as const,
+  
+  // JSON formatting
+  JSON_INDENT_SIZE: 2,
+  
+  // Zod schema configuration
+  ZOD_REF_STRATEGY_NONE: 'none' as const,
   
   // Redaction patterns for logging
   REDACT_ENV_PATTERN: /\b[A-Z][A-Z0-9_]*_(PASSWORD|SECRET|KEY|TOKEN|CREDENTIAL|API)\b/g,
