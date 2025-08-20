@@ -2,6 +2,7 @@
 
 import { CONFIG } from './constants/config-constants.js';
 import { TEXT } from './constants/text-constants.js';
+import { fmt } from './utils/format.js';
 import { EnvSecretProvider } from './services/env-secret-provider.js';
 import { PolicyProviderService } from './services/policy-provider.service.js';
 import { HttpActionExecutor } from './services/http-action-executor.service.js';
@@ -21,10 +22,13 @@ async function loadConfiguration() {
   
   try {
     const config = await configLoader.loadConfig();
-    writeInfo(`Configuration loaded: ${config.mappings.length} mappings, ${config.policies.length} policies`);
+    writeInfo(fmt(TEXT.INDEX_CONFIG_LOADED, { 
+      mappings: config.mappings.length, 
+      policies: config.policies.length 
+    }));
     return config;
   } catch (error: any) {
-    writeError(`Failed to load configuration: ${error.message}`, {
+    writeError(fmt(TEXT.INDEX_CONFIG_LOAD_FAILED, { error: error.message }), {
       level: CONFIG.LOG_LEVEL_ERROR,
       code: CONFIG.ERROR_CODE_INVALID_REQUEST
     });
@@ -88,7 +92,7 @@ async function main(): Promise<void> {
     
     await serverManager.start();
   } catch (error) {
-    writeError('Failed to start server', {
+    writeError(TEXT.INDEX_SERVER_START_FAILED, {
       level: CONFIG.LOG_LEVEL_ERROR,
       code: CONFIG.ERROR_CODE_INVALID_REQUEST
     });
@@ -99,7 +103,7 @@ async function main(): Promise<void> {
 if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
   // Check if running doctor command
   const args = process.argv.slice(2);
-  if (args[0] === 'doctor') {
+  if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
     // Import and run doctor CLI
     import('./cli/doctor.js').then(({ DoctorCLI }) => {
       const doctor = new DoctorCLI(args[1]);

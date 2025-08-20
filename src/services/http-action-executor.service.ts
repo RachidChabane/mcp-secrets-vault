@@ -37,7 +37,7 @@ export class HttpActionExecutor implements IActionExecutor {
     };
     if (request.method === 'POST' && request.body) {
       options.body = JSON.stringify(request.body);
-      headers[CONFIG.HEADER_CONTENT_TYPE] = 'application/json';
+      headers[CONFIG.HEADER_CONTENT_TYPE] = CONFIG.CONTENT_TYPE_JSON;
     }
     return options;
   }
@@ -93,12 +93,12 @@ export class HttpActionExecutor implements IActionExecutor {
     }
     
     // Check injection type
-    if (!['header', 'bearer'].includes(request.injectionType)) {
+    if (![TEXT.INJECTION_TYPE_HEADER, TEXT.INJECTION_TYPE_BEARER].includes(request.injectionType)) {
       throw new Error(TEXT.ERROR_INVALID_REQUEST);
     }
     
     // Check header name for header injection
-    if (request.injectionType === 'header') {
+    if (request.injectionType === TEXT.INJECTION_TYPE_HEADER) {
       if (isEmptyOrWhitespace(request.headerName)) {
         throw new Error(TEXT.ERROR_EMPTY_HEADER_NAME);
       }

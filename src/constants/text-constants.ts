@@ -292,7 +292,59 @@ export const TEXT = {
   VALIDATE_FILE_NOT_FOUND: 'File not found',
   VALIDATE_LOADING: 'Loading configuration...',
   VALIDATE_VALIDATING: 'Validating structure...',
-  VALIDATE_STRUCTURE_VALID: 'Configuration structure is valid'
+  VALIDATE_STRUCTURE_VALID: 'Configuration structure is valid',
+  
+  // CLI status icons
+  CLI_ICON_SUCCESS: '✅',
+  CLI_ICON_WARNING: '⚠️ ',
+  CLI_ICON_ERROR: '❌',
+  
+  // Index.ts messages
+  INDEX_CONFIG_LOADED: 'Configuration loaded: {mappings} mappings, {policies} policies',
+  INDEX_CONFIG_LOAD_FAILED: 'Failed to load configuration: {error}',
+  INDEX_SERVER_START_FAILED: 'Failed to start server',
+  
+  // CLI commands
+  CLI_COMMAND_DOCTOR: 'doctor',
+  
+  // Doctor CLI help text
+  DOCTOR_HELP_HEADER: 'MCP Secrets Vault - Doctor CLI',
+  DOCTOR_HELP_DESCRIPTION: 'Description:',
+  DOCTOR_HELP_USAGE: 'Usage:',
+  DOCTOR_HELP_ARGUMENTS: 'Arguments:',
+  DOCTOR_HELP_EXAMPLES: 'Examples:',
+  DOCTOR_HELP_EXIT_CODES: 'Exit Codes:',
+  DOCTOR_HELP_CHECKS: 'Checks Performed:',
+  DOCTOR_HELP_CONFIG_ARG: 'config-file    Path to configuration file (default: vault.config.json)',
+  DOCTOR_HELP_EXAMPLE_DEFAULT: 'doctor                    # Check default vault.config.json',
+  DOCTOR_HELP_EXAMPLE_CUSTOM: 'doctor my-config.json     # Check specific file',
+  DOCTOR_HELP_EXAMPLE_HELP: 'doctor --help             # Show this help message',
+  DOCTOR_HELP_EXIT_0: '0    All checks passed or only warnings',
+  DOCTOR_HELP_EXIT_2: '2    Critical errors found',
+  DOCTOR_HELP_CHECK_LIST: '• Configuration schema validity\n  • Environment variable existence\n  • Domain configuration coherence\n  • Rate limit reasonableness\n  • Audit directory accessibility\n  • Policy expiration status',
+  DOCTOR_FILE_NOT_FOUND: 'File not found: {path}',
+  DOCTOR_FATAL_ERROR: 'Fatal error:',
+  
+  // Validate-config CLI messages
+  VALIDATE_CONFIG_SUCCESS: 'Configuration is valid!',
+  VALIDATE_CONFIG_JSON_EXAMPLE: '{\n  "version": "1.0.0",\n  "mappings": [...],\n  "policies": [...]\n}',
+  VALIDATE_CONFIG_SECURITY_NOTE: 'Security Notes:\n  • Never commit actual secrets to version control\n  • Use environment variables for sensitive values\n  • Restrict file permissions appropriately',
+  VALIDATE_CONFIG_HELP_TIP: 'Tip: Run with DEBUG=* for detailed validation output',
+  VALIDATE_CONFIG_JSON_ERROR: ': Invalid JSON in {path}',
+  VALIDATE_CONFIG_VALIDATION_FAILED: 'Configuration validation failed',
+  
+  
+  // Tool query audit descriptions
+  TOOL_QUERY_AUDIT_SECRET_DESC: 'Optional: Filter by secret ID',
+  TOOL_QUERY_AUDIT_DOMAIN_DESC: 'Optional: Filter by domain',
+  TOOL_QUERY_AUDIT_OUTCOME_DESC: 'Optional: Filter by outcome (success, denied, error)',
+  TOOL_QUERY_AUDIT_START_DESC: 'Optional: Start time (ISO 8601)',
+  TOOL_QUERY_AUDIT_END_DESC: 'Optional: End time (ISO 8601)',
+  TOOL_QUERY_AUDIT_PAGE_DESC: 'Optional: Page number (default: 1)',
+  TOOL_QUERY_AUDIT_PAGE_SIZE_DESC: 'Optional: Page size (default: 50, max: 500)',
+  
+  // Validation messages
+  VALIDATION_NON_EMPTY_STRING: '{fieldName} must be a non-empty string'
 } as const;
 
 export type TextKey = keyof typeof TEXT;

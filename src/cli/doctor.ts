@@ -7,15 +7,15 @@ import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
 import { fmt } from '../utils/format.js';
 
-// ANSI color codes for terminal output
+// Use centralized color codes
 const colors = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  cyan: '\x1b[36m',
-  gray: '\x1b[90m'
+  reset: CONFIG.ANSI_RESET,
+  red: CONFIG.ANSI_RED,
+  green: CONFIG.ANSI_GREEN,
+  yellow: CONFIG.ANSI_YELLOW,
+  blue: CONFIG.ANSI_BLUE,
+  cyan: CONFIG.ANSI_CYAN,
+  gray: CONFIG.ANSI_GRAY
 };
 
 interface DiagnosticResult {
@@ -39,17 +39,17 @@ function colorize(text: string, color: keyof typeof colors): string {
 
 // Print section header
 function printHeader(title: string): void {
-  console.log(`\n${colorize('═'.repeat(60), 'blue')}`);
+  console.log(`\n${colorize(CONFIG.CLI_SEPARATOR_LINE, 'blue')}`);
   console.log(colorize(`  ${title}`, 'cyan'));
-  console.log(`${colorize('═'.repeat(60), 'blue')}\n`);
+  console.log(`${colorize(CONFIG.CLI_SEPARATOR_LINE, 'blue')}\n`);
 }
 
 // Print diagnostic result
 function printResult(result: DiagnosticResult): void {
   const statusColor = result.status === 'OK' ? 'green' : 
                       result.status === 'WARN' ? 'yellow' : 'red';
-  const statusIcon = result.status === 'OK' ? '✅' : 
-                     result.status === 'WARN' ? '⚠️ ' : '❌';
+  const statusIcon = result.status === 'OK' ? TEXT.CLI_ICON_SUCCESS : 
+                     result.status === 'WARN' ? TEXT.CLI_ICON_WARNING : TEXT.CLI_ICON_ERROR;
   
   console.log(`${statusIcon} ${colorize(result.status, statusColor)} - ${result.check}`);
   console.log(`  ${colorize(result.message, 'gray')}`);
@@ -122,7 +122,7 @@ export class DoctorCLI {
           check: TEXT.DOCTOR_CHECK_CONFIG_SCHEMA,
           status: 'ERROR',
           message: TEXT.DOCTOR_CONFIG_NOT_FOUND,
-          details: [`File not found: ${this.configPath}`]
+          details: [fmt(TEXT.DOCTOR_FILE_NOT_FOUND, { path: this.configPath })]
         });
       } else {
         this.results.push({
@@ -418,17 +418,17 @@ export class DoctorCLI {
     console.log(`${colorize(TEXT.DOCTOR_WARNINGS, 'yellow')}: ${summary.warnings}`);
     console.log(`${colorize(TEXT.DOCTOR_ERRORS, 'red')}: ${summary.errors}`);
     
-    console.log(`\n${colorize('━'.repeat(60), summary.errors > 0 ? 'red' : summary.warnings > 0 ? 'yellow' : 'green')}`);
+    console.log(`\n${colorize(CONFIG.CLI_SEPARATOR_LINE_THIN, summary.errors > 0 ? 'red' : summary.warnings > 0 ? 'yellow' : 'green')}`);
     
     if (summary.errors === 0 && summary.warnings === 0) {
-      console.log(`✅ ${colorize(TEXT.DOCTOR_CHECK_PASSED, 'green')}`);
+      console.log(`${TEXT.CLI_ICON_SUCCESS} ${colorize(TEXT.DOCTOR_CHECK_PASSED, 'green')}`);
     } else if (summary.errors === 0) {
-      console.log(`⚠️  ${colorize(TEXT.DOCTOR_CHECK_WARNINGS, 'yellow')}`);
+      console.log(`${TEXT.CLI_ICON_WARNING} ${colorize(TEXT.DOCTOR_CHECK_WARNINGS, 'yellow')}`);
     } else {
-      console.log(`❌ ${colorize(TEXT.DOCTOR_CHECK_ERRORS, 'red')}`);
+      console.log(`${TEXT.CLI_ICON_ERROR} ${colorize(TEXT.DOCTOR_CHECK_ERRORS, 'red')}`);
     }
     
-    console.log(`${colorize('━'.repeat(60), summary.errors > 0 ? 'red' : summary.warnings > 0 ? 'yellow' : 'green')}\n`);
+    console.log(`${colorize(CONFIG.CLI_SEPARATOR_LINE_THIN, summary.errors > 0 ? 'red' : summary.warnings > 0 ? 'yellow' : 'green')}\n`);
   }
 }
 
@@ -438,33 +438,28 @@ const configPath = args[0];
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`
-${colorize('MCP Secrets Vault - Doctor CLI', 'cyan')}
+${colorize(TEXT.DOCTOR_HELP_HEADER, 'cyan')}
 
-${colorize('Description:', 'yellow')}
+${colorize(TEXT.DOCTOR_HELP_DESCRIPTION, 'yellow')}
   ${TEXT.DOCTOR_HELP_TEXT}
 
-${colorize('Usage:', 'yellow')}
+${colorize(TEXT.DOCTOR_HELP_USAGE, 'yellow')}
   doctor [config-file]
 
-${colorize('Arguments:', 'yellow')}
-  config-file    Path to configuration file (default: vault.config.json)
+${colorize(TEXT.DOCTOR_HELP_ARGUMENTS, 'yellow')}
+  ${TEXT.DOCTOR_HELP_CONFIG_ARG}
 
-${colorize('Examples:', 'yellow')}
-  doctor                    # Check default vault.config.json
-  doctor my-config.json     # Check specific file
-  doctor --help             # Show this help message
+${colorize(TEXT.DOCTOR_HELP_EXAMPLES, 'yellow')}
+  ${TEXT.DOCTOR_HELP_EXAMPLE_DEFAULT}
+  ${TEXT.DOCTOR_HELP_EXAMPLE_CUSTOM}
+  ${TEXT.DOCTOR_HELP_EXAMPLE_HELP}
 
-${colorize('Exit Codes:', 'yellow')}
-  0    All checks passed or only warnings
-  2    Critical errors found
+${colorize(TEXT.DOCTOR_HELP_EXIT_CODES, 'yellow')}
+  ${TEXT.DOCTOR_HELP_EXIT_0}
+  ${TEXT.DOCTOR_HELP_EXIT_2}
 
-${colorize('Checks Performed:', 'yellow')}
-  • Configuration schema validity
-  • Environment variable existence
-  • Domain configuration coherence
-  • Rate limit reasonableness
-  • Audit directory accessibility
-  • Policy expiration status
+${colorize(TEXT.DOCTOR_HELP_CHECKS, 'yellow')}
+  ${TEXT.DOCTOR_HELP_CHECK_LIST}
 `);
   process.exit(CONFIG.EXIT_CODE_SUCCESS);
 }
@@ -473,7 +468,7 @@ ${colorize('Checks Performed:', 'yellow')}
 if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
   const doctor = new DoctorCLI(configPath);
   doctor.run().catch((error) => {
-    console.error(`\n❌ ${colorize('Fatal error:', 'red')}`);
+    console.error(`\n${TEXT.CLI_ICON_ERROR} ${colorize(TEXT.DOCTOR_FATAL_ERROR, 'red')}`);
     console.error(colorize(error.message, 'red'));
     process.exit(CONFIG.EXIT_CODE_ERROR);
   });
