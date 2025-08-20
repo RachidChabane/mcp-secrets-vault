@@ -117,28 +117,24 @@ export class JsonlAuditService implements AuditService {
     this.currentFile = null;
   }
 
+  private async handleFileRotation(latestFile: any): Promise<void> {
+    const shouldRotate = await this.shouldRotateFile(latestFile);
+    if (!shouldRotate) {
+      this.currentFile = latestFile.path;
+    } else {
+      await this.rotate();
+    }
+  }
+
   private async getCurrentFile(): Promise<string> {
     if (!this.currentFile) {
       const files = await this.getAuditFiles();
-      
-      if (files.length > 0) {
-        const latestFile = files[0];
-        if (latestFile) {
-          const shouldRotate = await this.shouldRotateFile(latestFile);
-          
-          if (!shouldRotate) {
-            this.currentFile = latestFile.path;
-          } else {
-            await this.rotate();
-          }
-        } else {
-          await this.rotate();
-        }
+      if (files.length > 0 && files[0]) {
+        await this.handleFileRotation(files[0]);
       } else {
         await this.rotate();
       }
     }
-    
     return this.currentFile!;
   }
 
@@ -237,29 +233,25 @@ export class JsonlAuditService implements AuditService {
     };
   }
 
+  private parseAuditLine(line: string, options?: AuditQueryOptions): AuditEntry | null {
+    try {
+      const entry = JSON.parse(line) as AuditEntry;
+      return this.matchesTimeRange(entry, options) ? entry : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async readEntries(
     filePath: string, 
     options?: AuditQueryOptions
   ): Promise<AuditEntry[]> {
     try {
       const content = await fs.readFile(filePath, CONFIG.DEFAULT_ENCODING);
-      // Handle both LF and CRLF line endings
       const lines = content.split(CONFIG.LINE_ENDING_PATTERN).filter(line => line.trim());
-      const entries: AuditEntry[] = [];
-      
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line) as AuditEntry;
-          
-          if (this.matchesTimeRange(entry, options)) {
-            entries.push(entry);
-          }
-        } catch {
-          continue;
-        }
-      }
-      
-      return entries;
+      return lines
+        .map(line => this.parseAuditLine(line, options))
+        .filter((entry): entry is AuditEntry => entry !== null);
     } catch {
       return [];
     }

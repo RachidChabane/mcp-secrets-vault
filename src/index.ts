@@ -32,13 +32,7 @@ async function loadConfiguration() {
   }
 }
 
-async function createServices(config: Awaited<ReturnType<typeof loadConfiguration>>) {
-  const secretProvider = new EnvSecretProvider(config.mappings);
-  const policyProvider = new PolicyProviderService();
-  const actionExecutor = new HttpActionExecutor();
-  const rateLimiter = new RateLimiterService();
-  
-  // Initialize audit service with config settings
+async function initializeAuditService(config: Awaited<ReturnType<typeof loadConfiguration>>) {
   const auditService = new JsonlAuditService(
     config.settings?.auditDir || CONFIG.DEFAULT_AUDIT_DIR,
     {
@@ -46,20 +40,24 @@ async function createServices(config: Awaited<ReturnType<typeof loadConfiguratio
       maxAgeDays: config.settings?.maxFileAgeDays
     }
   );
-  
   await auditService.initialize();
+  return auditService;
+}
+
+async function createServices(config: Awaited<ReturnType<typeof loadConfiguration>>) {
+  const secretProvider = new EnvSecretProvider(config.mappings);
+  const policyProvider = new PolicyProviderService();
+  const actionExecutor = new HttpActionExecutor();
+  const rateLimiter = new RateLimiterService();
+  const auditService = await initializeAuditService(config);
   
-  // Load policies from config instead of file
   await policyProvider.loadPoliciesFromConfig(config.policies);
-  
-  // Set default rate limit if provided
   if (config.settings?.defaultRateLimit) {
     rateLimiter.setDefaultLimit(
       config.settings.defaultRateLimit.requests,
       config.settings.defaultRateLimit.windowSeconds
     );
   }
-  
   return { secretProvider, policyProvider, actionExecutor, rateLimiter, auditService };
 }
 

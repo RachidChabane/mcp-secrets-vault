@@ -28,62 +28,49 @@ export class HttpActionExecutor implements IActionExecutor {
   /**
    * Execute an HTTP action with secret injection
    */
-  async execute(request: ActionRequest): Promise<ActionResponse> {
-    // Validate request
-    this.validateRequest(request);
-    
-    // Inject secret into headers
-    const headers = this.injectSecret(request);
-    
-    // Create abort controller for timeout
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      CONFIG.HTTP_TIMEOUT_MS
-    );
-    
-    try {
-      // Build fetch options with no redirect following
-      const options: RequestInit = {
-        method: request.method,
-        headers,
-        signal: controller.signal,
-        redirect: CONFIG.FETCH_REDIRECT_MODE
-      };
-      
-      // Add body for POST requests
-      if (request.method === 'POST' && request.body) {
-        options.body = JSON.stringify(request.body);
-        headers[CONFIG.HEADER_CONTENT_TYPE] = 'application/json';
-      }
-      
-      // Execute request
-      const response = await fetch(request.url, options);
-      
-      // Sanitize and return response
-      return await this.sanitizeResponse(response);
-      
-    } catch (error) {
-      // Handle timeout and other errors
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          return {
-            statusCode: 0,
-            statusText: TEXT.ERROR_TIMEOUT,
-            headers: {},
-            error: TEXT.ERROR_TIMEOUT
-          };
-        }
-      }
-      
-      // Generic error response
+  private buildFetchOptions(request: ActionRequest, headers: Record<string, string>, controller: AbortController): RequestInit {
+    const options: RequestInit = {
+      method: request.method,
+      headers,
+      signal: controller.signal,
+      redirect: CONFIG.FETCH_REDIRECT_MODE
+    };
+    if (request.method === 'POST' && request.body) {
+      options.body = JSON.stringify(request.body);
+      headers[CONFIG.HEADER_CONTENT_TYPE] = 'application/json';
+    }
+    return options;
+  }
+
+  private handleExecutionError(error: unknown): ActionResponse {
+    if (error instanceof Error && error.name === 'AbortError') {
       return {
         statusCode: 0,
-        statusText: TEXT.ERROR_NETWORK_ERROR,
+        statusText: TEXT.ERROR_TIMEOUT,
         headers: {},
-        error: sanitizeError(error)
+        error: TEXT.ERROR_TIMEOUT
       };
-      
+    }
+    return {
+      statusCode: 0,
+      statusText: TEXT.ERROR_NETWORK_ERROR,
+      headers: {},
+      error: sanitizeError(error)
+    };
+  }
+
+  async execute(request: ActionRequest): Promise<ActionResponse> {
+    this.validateRequest(request);
+    const headers = this.injectSecret(request);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONFIG.HTTP_TIMEOUT_MS);
+    
+    try {
+      const options = this.buildFetchOptions(request, headers, controller);
+      const response = await fetch(request.url, options);
+      return await this.sanitizeResponse(response);
+    } catch (error) {
+      return this.handleExecutionError(error);
     } finally {
       clearTimeout(timeout);
     }
