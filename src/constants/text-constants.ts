@@ -193,7 +193,16 @@ export const TEXT = {
   SNAPSHOT_DESC_ERROR_RESPONSE: 'Error response snapshot',
   SNAPSHOT_DESC_EMPTY_RESPONSE: 'Empty response snapshot',
   SNAPSHOT_DESC_PAGINATION: 'Pagination snapshot',
-  SNAPSHOT_DESC_COMPLEX_OBJECT: 'Complex object snapshot'
+  SNAPSHOT_DESC_COMPLEX_OBJECT: 'Complex object snapshot',
+  
+  // Schema generation messages
+  SCHEMA_GENERATION_SUCCESS: 'JSON Schema generated successfully',
+  SCHEMA_GENERATION_FAILED: 'Failed to generate JSON Schema',
+  SCHEMA_REMINDER_EXACT_FQDN: 'Remember: All domains must be exact FQDNs - wildcards are not allowed',
+  SCHEMA_TITLE: 'MCP Secrets Vault Configuration',
+  SCHEMA_DESCRIPTION: 'Configuration schema for MCP Secrets Vault. All domains must be exact FQDNs - wildcards are not allowed.',
+  SCHEMA_DOMAIN_ITEM_DESC: 'Exact FQDN only (e.g., "api.example.com"). Wildcards (*, ?, []) are NOT allowed.',
+  SCHEMA_DOMAIN_LIST_DESC: 'List of exact FQDNs that can be accessed with this secret. No wildcards allowed.'
 } as const;
 
 export type TextKey = keyof typeof TEXT;

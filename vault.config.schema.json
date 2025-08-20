@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "mcp-secrets-vault:v1.0.0:451ea85c:vault.config.schema.json",
+  "title": "MCP Secrets Vault Configuration",
+  "description": "Configuration schema for MCP Secrets Vault. All domains must be exact FQDNs - wildcards are not allowed.",
+  "$ref": "#/definitions/VaultConfig",
+  "definitions": {
+    "VaultConfig": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "secretId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$",
+                "errorMessage": {
+                  "pattern": "Invalid secret ID format"
+                }
+              },
+              "envVar": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]*$",
+                "errorMessage": {
+                  "pattern": "Environment variable must be uppercase with underscores"
+                }
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "secretId",
+              "envVar"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "policies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "secretId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$",
+                "errorMessage": {
+                  "pattern": "Invalid secret ID format"
+                }
+              },
+              "allowedActions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "http_get",
+                    "http_post"
+                  ]
+                },
+                "minItems": 1,
+                "errorMessage": {
+                  "minItems": "Allowed actions cannot be empty"
+                }
+              },
+              "allowedDomains": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 253,
+                  "description": "Exact FQDN only (e.g., \"api.example.com\"). Wildcards (*, ?, []) are NOT allowed."
+                },
+                "minItems": 1,
+                "errorMessage": {
+                  "minItems": "Allowed domains cannot be empty"
+                },
+                "description": "List of exact FQDNs that can be accessed with this secret. No wildcards allowed."
+              },
+              "rateLimit": {
+                "type": "object",
+                "properties": {
+                  "requests": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "windowSeconds": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "requests",
+                  "windowSeconds"
+                ],
+                "additionalProperties": false
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "secretId",
+              "allowedActions",
+              "allowedDomains"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "auditDir": {
+              "type": "string"
+            },
+            "maxFileSizeMb": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "maxFileAgeDays": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "defaultRateLimit": {
+              "type": "object",
+              "properties": {
+                "requests": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "windowSeconds": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "requests",
+                "windowSeconds"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

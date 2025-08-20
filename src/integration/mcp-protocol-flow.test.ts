@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
+import { promises as fs } from 'fs';
+import path from 'path';
+import os from 'os';
 import { DiscoverTool } from '../tools/discover-tool.js';
 import { DescribePolicyTool } from '../tools/describe-policy-tool.js';
 import { UseSecretTool } from '../tools/use-secret-tool.js';
@@ -20,6 +23,7 @@ describe('MCP Protocol Flow Tests', () => {
   let actionExecutor: HttpActionExecutor;
   let rateLimiter: RateLimiterService;
   let auditService: JsonlAuditService;
+  let testAuditDir: string;
 
   const testPolicies: PolicyConfig[] = [
     {
@@ -52,6 +56,10 @@ describe('MCP Protocol Flow Tests', () => {
     originalEnv = { ...process.env };
     vi.clearAllMocks();
     
+    // Create unique temporary directory for audit logs
+    testAuditDir = path.join(os.tmpdir(), `audit-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await fs.mkdir(testAuditDir, { recursive: true });
+    
     // Set up test environment
     process.env['TEST_API_KEY'] = 'test-secret-value';
     process.env['TEST_DB_PASS'] = 'db-secret-value';
@@ -78,7 +86,7 @@ describe('MCP Protocol Flow Tests', () => {
     policyProvider = new PolicyProviderService();
     actionExecutor = new HttpActionExecutor();
     rateLimiter = new RateLimiterService();
-    auditService = new JsonlAuditService();
+    auditService = new JsonlAuditService(testAuditDir);
     
     await auditService.initialize();
     
@@ -87,12 +95,69 @@ describe('MCP Protocol Flow Tests', () => {
       return testPolicies.find(p => p.secretId === secretId);
     });
     
+    vi.spyOn(policyProvider, 'evaluate').mockImplementation((secretId, action, domain) => {
+      const policy = testPolicies.find(p => p.secretId === secretId);
+      if (!policy) {
+        return {
+          allowed: false,
+          code: CONFIG.ERROR_CODE_NO_POLICY,
+          message: TEXT.ERROR_POLICY_NOT_FOUND
+        };
+      }
+      
+      // Check if policy is expired
+      if (policy.expiresAt && new Date(policy.expiresAt) < new Date()) {
+        return {
+          allowed: false,
+          code: CONFIG.ERROR_CODE_POLICY_EXPIRED,
+          message: TEXT.ERROR_POLICY_EXPIRED
+        };
+      }
+      
+      // Check allowed actions
+      if (!policy.allowedActions.includes(action as any)) {
+        return {
+          allowed: false,
+          code: CONFIG.ERROR_CODE_FORBIDDEN_ACTION,
+          message: TEXT.ERROR_FORBIDDEN_ACTION
+        };
+      }
+      
+      // Check allowed domains
+      if (!policy.allowedDomains.includes(domain)) {
+        return {
+          allowed: false,
+          code: CONFIG.ERROR_CODE_FORBIDDEN_DOMAIN,
+          message: TEXT.ERROR_FORBIDDEN_DOMAIN
+        };
+      }
+      
+      return { allowed: true };
+    });
+    
+    vi.spyOn(policyProvider, 'hasPolicy').mockImplementation((secretId) => {
+      return testPolicies.some(p => p.secretId === secretId);
+    });
+    
     // Mark policies as loaded by mocking the private field
     (policyProvider as any).policiesLoaded = true;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = originalEnv;
+    
+    // Clean up audit service and temporary directory
+    if (auditService) {
+      await auditService.close();
+    }
+    
+    if (testAuditDir) {
+      try {
+        await fs.rm(testAuditDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   });
 
   describe('End-to-End Workflows', () => {
@@ -127,7 +192,7 @@ describe('MCP Protocol Flow Tests', () => {
         body: JSON.stringify({ success: true })
       });
       
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       const useResult = await useSecretTool.execute({
         secretId: 'test_api_key',
         action: {
@@ -153,7 +218,7 @@ describe('MCP Protocol Flow Tests', () => {
 
     it('should handle denied workflow with audit trail', async () => {
       // Attempt to use secret with forbidden domain
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       await expect(async () => {
         await useSecretTool.execute({
@@ -200,7 +265,7 @@ describe('MCP Protocol Flow Tests', () => {
         body: JSON.stringify({ success: true })
       });
       
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       const promises = [
         useSecretTool.execute({
@@ -271,7 +336,7 @@ describe('MCP Protocol Flow Tests', () => {
         body: JSON.stringify({ success: true })
       });
       
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       // Make requests up to the limit (5 requests)
       for (let i = 0; i < 5; i++) {
@@ -316,7 +381,7 @@ describe('MCP Protocol Flow Tests', () => {
         body: JSON.stringify({ success: true })
       });
       
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       // Use test_api_key 3 times (limit is 5)
       for (let i = 0; i < 3; i++) {
@@ -363,7 +428,7 @@ describe('MCP Protocol Flow Tests', () => {
 
   describe('Edge Cases', () => {
     it('should handle expired policies', async () => {
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       await expect(async () => {
         await useSecretTool.execute({
@@ -406,7 +471,7 @@ describe('MCP Protocol Flow Tests', () => {
         new ToolError(TEXT.ERROR_TIMEOUT, CONFIG.ERROR_CODE_TIMEOUT)
       );
       
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       await expect(async () => {
         await useSecretTool.execute({
@@ -423,12 +488,12 @@ describe('MCP Protocol Flow Tests', () => {
       const auditResult = await queryAuditTool.execute({});
       
       const entries = auditResult[TEXT.FIELD_ENTRIES] as any[];
-      expect(entries[0][TEXT.FIELD_OUTCOME]).toBe('denied');
-      expect(entries[0][TEXT.FIELD_REASON]).toContain('timeout');
+      expect(entries[0][TEXT.FIELD_OUTCOME]).toBe('error');
+      expect(entries[0][TEXT.FIELD_REASON]).toContain('failed');
     });
 
     it('should handle malformed requests', async () => {
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       // Missing required fields
       await expect(async () => {
@@ -471,7 +536,7 @@ describe('MCP Protocol Flow Tests', () => {
         body: JSON.stringify({ success: true })
       });
       
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       // Make several different attempts
       await useSecretTool.execute({
@@ -532,7 +597,7 @@ describe('MCP Protocol Flow Tests', () => {
         body: JSON.stringify({ success: true })
       });
       
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       
       // Make attempts with different secrets
       await useSecretTool.execute({

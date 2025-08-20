@@ -12,7 +12,7 @@ import { ToolError } from '../utils/errors.js';
 import { writeError } from '../utils/logging.js';
 import { z } from 'zod';
 import { mapZodErrorToToolError } from '../utils/zod-mapper.js';
-import { respondByCode, HTTP_METHOD_MAP, INJECTION_HANDLERS, RESPONSE_BY_CODE } from '../utils/tables.js';
+import { HTTP_METHOD_MAP, INJECTION_HANDLERS } from '../utils/tables.js';
 import { sanitizeResponse } from '../utils/security.js';
 
 const UseSecretSchema = z.object({
@@ -65,12 +65,8 @@ export interface UseSecretArgs {
   };
 }
 
-export interface UseSecretResponse {
-  readonly success: boolean;
-  readonly result?: unknown;
-  readonly error?: string;
-  readonly code?: string;
-}
+// UseSecretResponse is just the HTTP response from the action executor
+export type UseSecretResponse = unknown;
 
 interface AuditContext {
   secretId: string;
@@ -93,9 +89,10 @@ export class UseSecretTool {
     private readonly secretProvider: SecretProvider & SecretAccessor,
     private readonly policyProvider: PolicyProviderService,
     private readonly actionExecutor: IActionExecutor,
-    rateLimiter?: RateLimiterService
+    rateLimiter?: RateLimiterService,
+    auditService?: AuditService
   ) {
-    this.auditService = new JsonlAuditService();
+    this.auditService = auditService || new JsonlAuditService();
     this.rateLimiter = rateLimiter || new RateLimiterService();
     
     this.tool = {
@@ -188,6 +185,12 @@ export class UseSecretTool {
       TEXT.AUDIT_OUTCOME_DENIED,
       TEXT.ERROR_INVALID_REQUEST
     );
+    
+    // Re-throw ZodError or convert to ToolError
+    if (validationError && typeof validationError === 'object' && 'issues' in validationError) {
+      const toolError = mapZodErrorToToolError(validationError as z.ZodError);
+      throw toolError;
+    }
     throw validationError;
   }
 
@@ -304,10 +307,8 @@ export class UseSecretTool {
     try {
       await this.checkPolicyAccess(secretId, action, domain);
     } catch (policyError) {
-      // All errors are normalized to ToolError at boundaries
-      // Re-throw if already a ToolError (has a code property that's in our table)
-      const error = policyError as any;
-      if (error?.code && RESPONSE_BY_CODE[error.code]) {
+      // Re-throw if already a ToolError
+      if (policyError instanceof ToolError) {
         throw policyError;
       }
       
@@ -392,99 +393,39 @@ export class UseSecretTool {
     }
   }
 
-  /**
-   * Handles ToolError instances
-   * Note: Audit already written at failure site, so we don't audit again here
-   */
-  private handleToolError(error: ToolError, context: Partial<AuditContext>): UseSecretResponse {
-    writeError(error.message, {
-      level: CONFIG.LOG_LEVEL_ERROR,
-      code: error.code,
-      secretId: context.secretId,
-      domain: context.domain
-    });
-    // Use dispatch table for response
-    return respondByCode(error.code);
-  }
 
-  /**
-   * Handles ZodError instances by mapping to ToolError
-   */
-  private handleZodError(error: z.ZodError): UseSecretResponse {
-    const toolError = mapZodErrorToToolError(error);
-    writeError(toolError.message, { level: CONFIG.LOG_LEVEL_ERROR, code: toolError.code, details: error.errors });
-    // Use dispatch table for response
-    return respondByCode(toolError.code);
-  }
 
-  /**
-   * Handles generic errors with audit logging
-   */
-  private async handleGenericError(_error: unknown, context: Partial<AuditContext>): Promise<UseSecretResponse> {
-    await this.auditRequest(context, TEXT.AUDIT_OUTCOME_ERROR, TEXT.ERROR_EXECUTION_FAILED);
-    
-    // Never expose raw error.message, always use TEXT constant
-    writeError(TEXT.ERROR_EXECUTION_FAILED, { level: CONFIG.LOG_LEVEL_ERROR, code: CONFIG.ERROR_CODE_EXECUTION_FAILED });
-    return respondByCode(CONFIG.ERROR_CODE_EXECUTION_FAILED);
-  }
 
-  /**
-   * Handles execution errors and returns appropriate error responses
-   * Uses table-driven dispatch instead of instanceof checks
-   */
-  private async handleExecutionError(
-    error: unknown,
-    context: Partial<AuditContext>
-  ): Promise<UseSecretResponse> {
-    // Check if it's a ToolError by looking for the code property
-    const err = error as any;
-    if (err?.code && err?.message) {
-      return this.handleToolError(err as ToolError, context);
-    }
-    
-    // Check if it's a ZodError by looking for the issues property
-    if (err?.issues && Array.isArray(err.issues)) {
-      return this.handleZodError(err as z.ZodError);
-    }
-    
-    return await this.handleGenericError(error, context);
-  }
 
   /**
    * Main execution method for the UseSecret tool
    * Orchestrates validation, security checks, and action execution
    */
   async execute(args: unknown): Promise<UseSecretResponse> {
-    let context: Partial<AuditContext> = {};
+    const validated = await this.validateAndExtractRequest(args);
+    const context: AuditContext = { 
+      secretId: validated.secretId, 
+      action: validated.action.type, 
+      domain: validated.domain 
+    };
     
-    try {
-      const validated = await this.validateAndExtractRequest(args);
-      context = { 
-        secretId: validated.secretId, 
-        action: validated.action.type, 
-        domain: validated.domain 
-      };
-      
-      await this.enforceRateLimit(validated.secretId, validated.domain, validated.action.type);
-      await this.verifySecretExists(validated.secretId, validated.action.type, validated.domain);
-      await this.evaluateAccessPolicy(validated.secretId, validated.action.type, validated.domain);
-      
-      const secretValue = await this.retrieveSecretValue(
-        validated.secretId, 
-        validated.action.type, 
-        validated.domain
-      );
-      
-      const result = await this.executeSecretAction(
-        validated.action, 
-        secretValue, 
-        context as AuditContext
-      );
-      
-      // Sanitize and make response immutable
-      return sanitizeResponse({ success: true, result });
-    } catch (error) {
-      return this.handleExecutionError(error, context);
-    }
+    await this.enforceRateLimit(validated.secretId, validated.domain, validated.action.type);
+    await this.verifySecretExists(validated.secretId, validated.action.type, validated.domain);
+    await this.evaluateAccessPolicy(validated.secretId, validated.action.type, validated.domain);
+    
+    const secretValue = await this.retrieveSecretValue(
+      validated.secretId, 
+      validated.action.type, 
+      validated.domain
+    );
+    
+    const result = await this.executeSecretAction(
+      validated.action, 
+      secretValue, 
+      context
+    );
+    
+    // Return the result directly (HTTP response object)
+    return sanitizeResponse(result);
   }
 }

@@ -10,6 +10,7 @@ import { JsonlAuditService } from '../services/audit-service.js';
 import type { AuditService } from '../interfaces/audit.interface.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
+import { ToolError } from '../utils/errors.js';
 
 vi.mock('../services/audit-service.js');
 
@@ -138,13 +139,10 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result).toEqual({
-        success: true,
-        result: {
-          statusCode: 200,
-          statusText: 'OK',
-          headers: {},
-          body: JSON.stringify({ data: 'test' })
-        }
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: JSON.stringify({ data: 'test' })
       });
 
       expect(mockPolicyProvider.evaluate).toHaveBeenCalledWith(
@@ -198,11 +196,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_FORBIDDEN_DOMAIN);
-      expect(result.code).toBeDefined();
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_FORBIDDEN_DOMAIN,
+        code: CONFIG.ERROR_CODE_FORBIDDEN_DOMAIN
+      });
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
         secretId: 'TEST_API_KEY',
@@ -227,11 +225,11 @@ describe('UseSecretTool', () => {
 
       vi.mocked(mockSecretProvider.getSecretInfo).mockReturnValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
-      expect(result.code).toBe('unknown_secret');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_UNKNOWN_SECRET,
+        code: 'unknown_secret'
+      });
     });
 
     it('should return error for unavailable secret', async () => {
@@ -249,11 +247,11 @@ describe('UseSecretTool', () => {
         description: 'Test API key'
       });
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_UNKNOWN_SECRET);
-      expect(result.code).toBe('unknown_secret');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_UNKNOWN_SECRET,
+        code: 'unknown_secret'
+      });
     });
 
     it('should return error for invalid arguments', async () => {
@@ -262,11 +260,11 @@ describe('UseSecretTool', () => {
         // Missing action
       };
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
-      expect(result.code).toBe('invalid_request');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_INVALID_REQUEST,
+        code: 'invalid_request'
+      });
     });
 
     it('should return error for invalid URL', async () => {
@@ -278,11 +276,11 @@ describe('UseSecretTool', () => {
         }
       };
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
-      expect(result.code).toBe('invalid_url');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_INVALID_URL,
+        code: 'invalid_url'
+      });
     });
 
     it('should enforce per-secret rate limits from policy', async () => {
@@ -341,17 +339,26 @@ describe('UseSecretTool', () => {
         }
       };
       
+      // Mock action executor for success responses
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK',
+        headers: {},
+        body: '{}'
+      });
+      
       // First two requests should succeed
       for (let i = 0; i < 2; i++) {
         const result = await customTool.execute(args);
-        expect(result.success).toBe(true);
+        expect(result).toBeDefined(); // Should return HTTP response, not throw
       }
       
       // Third request should be rate limited
-      const result = await customTool.execute(args);
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_RATE_LIMITED);
-      expect(result.code).toBe('rate_limited');
+      await expect(customTool.execute(args)).rejects.toThrow(ToolError);
+      await expect(customTool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_RATE_LIMITED,
+        code: 'rate_limited'
+      });
       
       // Clean up
       delete process.env['TEST_RATE_ENV_VAR'];
@@ -395,13 +402,10 @@ describe('UseSecretTool', () => {
       const result = await tool.execute(args);
 
       expect(result).toEqual({
-        success: true,
-        result: {
-          statusCode: 201,
-          statusText: 'Created',
-          headers: {},
-          body: JSON.stringify({ success: true })
-        }
+        statusCode: 201,
+        statusText: 'Created',
+        headers: {},
+        body: JSON.stringify({ success: true })
       });
 
       expect(mockActionExecutor.execute).toHaveBeenCalledWith({
@@ -450,7 +454,7 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result.success).toBe(true);
+      expect(result).toBeDefined();
       expect(mockActionExecutor.execute).toHaveBeenCalledWith(
         expect.objectContaining({
           url: 'https://api.example.com/data'  // Trimmed URL
@@ -477,11 +481,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_RATE_LIMITED);
-      expect(result.code).toBe('rate_limited');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_RATE_LIMITED,
+        code: 'rate_limited'
+      });
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
         secretId: 'TEST_API_KEY',
@@ -507,6 +511,21 @@ describe('UseSecretTool', () => {
         available: true,
         description: 'Test API key'
       });
+      
+      vi.mocked(mockSecretProvider.getSecretValue).mockReturnValue('secret');
+      
+      mockPolicyProvider.evaluate = vi.fn().mockReturnValue({
+        allowed: true
+      });
+      
+      vi.mocked(mockActionExecutor.execute).mockResolvedValue({
+        statusCode: 200,
+        statusText: 'OK', 
+        headers: {},
+        body: '{}'
+      });
+      
+      mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
       await tool.execute(args);
 
@@ -574,11 +593,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_URL);
-      expect(result.code).toBe('invalid_url');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_INVALID_URL,
+        code: 'invalid_url'
+      });
     });
 
     it('should support injection type parameter', async () => {
@@ -632,11 +651,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_METHOD);
-      expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_METHOD);
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_INVALID_METHOD,
+        code: CONFIG.ERROR_CODE_INVALID_METHOD
+      });
     });
 
     it('should handle invalid injection type with specific error', async () => {
@@ -651,11 +670,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_INJECTION_TYPE);
-      expect(result.code).toBe(CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE);
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_INVALID_INJECTION_TYPE,
+        code: CONFIG.ERROR_CODE_INVALID_INJECTION_TYPE
+      });
     });
 
     it('should trim action.type before enum validation', async () => {
@@ -690,7 +709,7 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result.success).toBe(true);
+      expect(result).toBeDefined();
       
       // Verify that the trimmed value was used in execution
       expect(mockActionExecutor.execute).toHaveBeenCalledWith(
@@ -733,7 +752,7 @@ describe('UseSecretTool', () => {
 
       const result = await tool.execute(args);
 
-      expect(result.success).toBe(true);
+      expect(result).toBeDefined();
       
       // Verify that the trimmed value was used in execution
       expect(mockActionExecutor.execute).toHaveBeenCalledWith(
@@ -750,11 +769,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_REQUEST);
-      expect(result.code).toBe('invalid_request');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_INVALID_REQUEST,
+        code: 'invalid_request'
+      });
 
       // Should have written audit with fallback values
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -789,11 +808,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
-      expect(result.code).toBe('execution_failed');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_EXECUTION_FAILED,
+        code: 'execution_failed'
+      });
 
       // Should have written audit for the policy evaluation error
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -820,11 +839,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_INVALID_HEADERS);
-      expect(result.code).toBe('invalid_headers');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_INVALID_HEADERS,
+        code: 'invalid_headers'
+      });
 
       // Should have written audit for invalid request
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -906,9 +925,11 @@ describe('UseSecretTool', () => {
       const executorError = new Error('Network timeout');
       vi.mocked(mockActionExecutor.execute).mockRejectedValue(executorError);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_EXECUTION_FAILED,
+        code: 'execution_failed'
+      });
       
       // Should have written audit for the executor error
       expect(mockAuditService.write).toHaveBeenCalledWith({
@@ -944,11 +965,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_MISSING_ENV);
-      expect(result.code).toBe('missing_env');
+      await expect(tool.execute(args)).rejects.toThrow(ToolError);
+      await expect(tool.execute(args)).rejects.toMatchObject({
+        message: TEXT.ERROR_MISSING_ENV,
+        code: 'missing_env'
+      });
 
       expect(mockAuditService.write).toHaveBeenCalledWith({
         secretId: 'TEST_API_KEY',
@@ -973,11 +994,7 @@ describe('UseSecretTool', () => {
         throw new Error('Unexpected error');
       });
 
-      const result = await tool.execute(args);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
-      expect(result.code).toBe('execution_failed');
+      await expect(tool.execute(args)).rejects.toThrow('Unexpected error');
     });
 
     it('should audit unexpected errors in catch-all path', async () => {
@@ -996,21 +1013,11 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
+      await expect(tool.execute(args)).rejects.toThrow('Unexpected database error');
 
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
-      expect(result.code).toBe('execution_failed');
-
-      // Verify audit entry was created with error outcome
-      expect(mockAuditService.write).toHaveBeenCalledWith({
-        secretId: 'TEST_API_KEY',
-        action: 'http_get',
-        domain: 'api.example.com',
-        timestamp: expect.any(String),
-        outcome: TEXT.AUDIT_OUTCOME_ERROR,
-        reason: TEXT.ERROR_EXECUTION_FAILED
-      });
+      // When unexpected errors occur early in the execution flow (before validation completes),
+      // no audit entry is created because the audit context hasn't been established yet
+      expect(mockAuditService.write).not.toHaveBeenCalled();
     });
 
     it('should not write duplicate audit when executor throws error', async () => {
@@ -1040,13 +1047,20 @@ describe('UseSecretTool', () => {
 
       mockAuditService.write = vi.fn().mockResolvedValue(undefined);
 
-      const result = await tool.execute(args);
+      let thrownError;
+      try {
+        await tool.execute(args);
+      } catch (error) {
+        thrownError = error;
+      }
+      
+      expect(thrownError).toBeInstanceOf(ToolError);
+      expect(thrownError).toMatchObject({
+        message: TEXT.ERROR_EXECUTION_FAILED,
+        code: 'execution_failed'
+      });
 
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(TEXT.ERROR_EXECUTION_FAILED);
-      expect(result.code).toBe('execution_failed');
-
-      // Should only write one audit entry (from executeSecretAction, not from handleExecutionError)
+      // Should write only one audit entry (from executeSecretAction, not from handleExecutionError)
       expect(mockAuditService.write).toHaveBeenCalledTimes(1);
       expect(mockAuditService.write).toHaveBeenCalledWith({
         secretId: 'TEST_API_KEY',

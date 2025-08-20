@@ -1,0 +1,105 @@
+// MCP Secrets Vault Configuration Example
+// IMPORTANT: All domains MUST be exact FQDNs. Wildcards are NOT allowed.
+{
+  // Schema version (required, must be "1.0.0")
+  "version": "1.0.0",
+  
+  // Secret mappings: Map secret IDs to environment variables
+  // These define which environment variables contain the actual secret values
+  "mappings": [
+    {
+      "secretId": "github-api-key",      // Unique identifier for the secret
+      "envVar": "GITHUB_API_KEY",        // Environment variable name (must be UPPERCASE)
+      "description": "GitHub API key"     // Optional description
+    },
+    {
+      "secretId": "openai-api-key",
+      "envVar": "OPENAI_API_KEY",
+      "description": "OpenAI API key for GPT models"
+    }
+  ],
+  
+  // Access policies: Define which domains and actions are allowed for each secret
+  "policies": [
+    {
+      "secretId": "github-api-key",
+      
+      // Allowed HTTP methods (http_get, http_post)
+      "allowedActions": ["http_get", "http_post"],
+      
+      // IMPORTANT: Exact FQDNs only - NO wildcards!
+      // ❌ WRONG: "*.github.com" - wildcards not allowed
+      // ❌ WRONG: "github.*" - wildcards not allowed  
+      // ✅ CORRECT: List each exact domain
+      "allowedDomains": [
+        "api.github.com",       // Main API endpoint
+        "github.com",           // Web interface
+        "raw.githubusercontent.com"  // Raw content access
+        // Add more exact domains as needed
+      ],
+      
+      // Optional: Rate limiting per secret
+      "rateLimit": {
+        "requests": 5000,        // Number of requests allowed
+        "windowSeconds": 3600    // Time window in seconds (1 hour)
+      }
+    },
+    {
+      "secretId": "openai-api-key",
+      "allowedActions": ["http_post"],  // OpenAI typically uses POST
+      
+      // EXACT domain only - no patterns or wildcards
+      "allowedDomains": [
+        "api.openai.com"  // The only OpenAI API domain
+        // Cannot use "*.openai.com" or similar patterns
+      ],
+      
+      // Stricter rate limit for expensive API
+      "rateLimit": {
+        "requests": 100,
+        "windowSeconds": 60  // 100 requests per minute
+      },
+      
+      // Optional: Policy expiration
+      "expiresAt": "2025-12-31T23:59:59Z"  // ISO 8601 datetime
+    }
+  ],
+  
+  // Optional: Global settings
+  "settings": {
+    "auditDir": "audit",           // Directory for audit logs
+    "maxFileSizeMb": 100,          // Max audit file size before rotation
+    "maxFileAgeDays": 30,          // Max age of audit files
+    
+    // Default rate limit for secrets without specific limits
+    "defaultRateLimit": {
+      "requests": 100,
+      "windowSeconds": 3600
+    }
+  }
+}
+
+// Notes on Domain Configuration:
+// 
+// 1. EXACT MATCHING ONLY:
+//    Every domain must be an exact, fully-qualified domain name.
+//    The system will ONLY allow requests to these exact domains.
+//
+// 2. NO WILDCARD SUPPORT:
+//    Patterns like "*.example.com", "api.*", or "example.*" are NOT supported.
+//    You must list each subdomain explicitly.
+//
+// 3. SUBDOMAINS:
+//    "example.com" does NOT include "api.example.com" or "www.example.com"
+//    Each subdomain must be listed separately.
+//
+// 4. PORTS:
+//    Domains should not include ports. "example.com:8080" is invalid.
+//    Use only the domain name: "example.com"
+//
+// 5. PROTOCOLS:
+//    Do not include protocols. Use "api.example.com", not "https://api.example.com"
+//
+// 6. CASE INSENSITIVE:
+//    Domains are automatically normalized to lowercase.
+//    "API.EXAMPLE.COM" becomes "api.example.com"

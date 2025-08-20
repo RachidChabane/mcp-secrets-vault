@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "mappings": [],
+  "policies": [],
+  "settings": {
+    "auditDir": "audit",
+    "maxFileSizeMb": 100,
+    "maxFileAgeDays": 30,
+    "defaultRateLimit": {
+      "requests": 100,
+      "windowSeconds": 3600
+    }
+  }
+}

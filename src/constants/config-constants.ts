@@ -220,7 +220,14 @@ export const CONFIG = {
   EXCEPTION_FIELD_NAMES: ['description', 'environment'] as const,
   
   // Sensitive key patterns for logging
-  SENSITIVE_KEY_PATTERNS: ['SECRET', 'KEY', 'TOKEN', 'PASSWORD'] as const
+  SENSITIVE_KEY_PATTERNS: ['SECRET', 'KEY', 'TOKEN', 'PASSWORD'] as const,
+  
+  // JSON Schema metadata
+  JSON_SCHEMA_DRAFT: 'http://json-schema.org/draft-07/schema#',
+  JSON_SCHEMA_ID_PREFIX: 'mcp-secrets-vault',
+  JSON_SCHEMA_VERSION: 'v1.0.0',
+  JSON_SCHEMA_FILENAME: 'vault.config.schema.json',
+  JSON_SCHEMA_NAME: 'VaultConfig'
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG;

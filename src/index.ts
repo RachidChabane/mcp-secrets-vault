@@ -10,42 +10,55 @@ import { DiscoverTool } from './tools/discover-tool.js';
 import { DescribePolicyTool } from './tools/describe-policy-tool.js';
 import { UseSecretTool } from './tools/use-secret-tool.js';
 import { QueryAuditTool } from './tools/query-audit-tool.js';
-import { SecretMapping } from './interfaces/secret-mapping.interface.js';
 import { JsonlAuditService } from './services/audit-service.js';
 import { McpServerManager } from './services/mcp-server-manager.js';
-import { writeError } from './utils/logging.js';
+import { ConfigLoaderService } from './services/config-loader.service.js';
+import { writeError, writeInfo } from './utils/logging.js';
 
-async function loadMappings(): Promise<SecretMapping[]> {
-  // TODO: Load from configuration file
-  // For now, return empty array or test mappings from env
-  const mappings: SecretMapping[] = [];
+
+async function loadConfiguration() {
+  const configLoader = new ConfigLoaderService();
   
-  // Example: Check for test mappings in env
-  const testMappings = process.env[CONFIG.ENV_TEST_SECRET_MAPPINGS];
-  if (testMappings) {
-    try {
-      return JSON.parse(testMappings);
-    } catch (error) {
-      writeError(TEXT.ERROR_INVALID_CONFIG, { 
-        level: CONFIG.LOG_LEVEL_ERROR,
-        code: CONFIG.ERROR_CODE_INVALID_REQUEST 
-      });
-    }
+  try {
+    const config = await configLoader.loadConfig();
+    writeInfo(`Configuration loaded: ${config.mappings.length} mappings, ${config.policies.length} policies`);
+    return config;
+  } catch (error: any) {
+    writeError(`Failed to load configuration: ${error.message}`, {
+      level: CONFIG.LOG_LEVEL_ERROR,
+      code: CONFIG.ERROR_CODE_INVALID_REQUEST
+    });
+    throw error;
   }
-  
-  return mappings;
 }
 
-
-async function createServices(mappings: SecretMapping[]) {
-  const secretProvider = new EnvSecretProvider(mappings);
+async function createServices(config: Awaited<ReturnType<typeof loadConfiguration>>) {
+  const secretProvider = new EnvSecretProvider(config.mappings);
   const policyProvider = new PolicyProviderService();
   const actionExecutor = new HttpActionExecutor();
   const rateLimiter = new RateLimiterService();
-  const auditService = new JsonlAuditService();
+  
+  // Initialize audit service with config settings
+  const auditService = new JsonlAuditService(
+    config.settings?.auditDir || CONFIG.DEFAULT_AUDIT_DIR,
+    {
+      maxSizeMB: config.settings?.maxFileSizeMb,
+      maxAgeDays: config.settings?.maxFileAgeDays
+    }
+  );
   
   await auditService.initialize();
-  await policyProvider.loadPolicies();
+  
+  // Load policies from config instead of file
+  await policyProvider.loadPoliciesFromConfig(config.policies);
+  
+  // Set default rate limit if provided
+  if (config.settings?.defaultRateLimit) {
+    rateLimiter.setDefaultLimit(
+      config.settings.defaultRateLimit.requests,
+      config.settings.defaultRateLimit.windowSeconds
+    );
+  }
   
   return { secretProvider, policyProvider, actionExecutor, rateLimiter, auditService };
 }
@@ -56,24 +69,33 @@ function createTools(services: Awaited<ReturnType<typeof createServices>>) {
   return {
     discoverTool: new DiscoverTool(secretProvider),
     describePolicyTool: new DescribePolicyTool(policyProvider),
-    useSecretTool: new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter),
+    useSecretTool: new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService),
     queryAuditTool: new QueryAuditTool(auditService)
   };
 }
 
 async function main(): Promise<void> {
   const serverManager = new McpServerManager();
-  const mappings = await loadMappings();
-  const services = await createServices(mappings);
-  const tools = createTools(services);
   
-  Object.values(tools).forEach(tool => serverManager.registerTool(tool));
-  
-  serverManager.registerShutdownHandler(async () => {
-    await services.auditService.close();
-  });
-  
-  await serverManager.start();
+  try {
+    const config = await loadConfiguration();
+    const services = await createServices(config);
+    const tools = createTools(services);
+    
+    Object.values(tools).forEach(tool => serverManager.registerTool(tool));
+    
+    serverManager.registerShutdownHandler(async () => {
+      await services.auditService.close();
+    });
+    
+    await serverManager.start();
+  } catch (error) {
+    writeError('Failed to start server', {
+      level: CONFIG.LOG_LEVEL_ERROR,
+      code: CONFIG.ERROR_CODE_INVALID_REQUEST
+    });
+    process.exit(CONFIG.EXIT_CODE_INVALID_CONFIG);
+  }
 }
 
 if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
