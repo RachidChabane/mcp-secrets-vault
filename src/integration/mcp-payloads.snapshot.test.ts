@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
+import { promises as fs } from 'fs';
+import path from 'path';
+import os from 'os';
 import { DiscoverTool } from '../tools/discover-tool.js';
 import { DescribePolicyTool } from '../tools/describe-policy-tool.js';
 import { UseSecretTool } from '../tools/use-secret-tool.js';
@@ -19,10 +22,15 @@ describe('MCP Payload Snapshots', () => {
   let actionExecutor: HttpActionExecutor;
   let rateLimiter: RateLimiterService;
   let auditService: JsonlAuditService;
+  let testAuditDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     originalEnv = { ...process.env };
     vi.clearAllMocks();
+    
+    // Create unique temporary directory for audit logs
+    testAuditDir = path.join(os.tmpdir(), `snapshot-audit-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await fs.mkdir(testAuditDir, { recursive: true });
     
     // Set up test environment
     process.env['TEST_API_KEY'] = 'test-secret-value';
@@ -44,11 +52,24 @@ describe('MCP Payload Snapshots', () => {
     policyProvider = new PolicyProviderService();
     actionExecutor = new HttpActionExecutor();
     rateLimiter = new RateLimiterService();
-    auditService = new JsonlAuditService();
+    auditService = new JsonlAuditService(testAuditDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.env = originalEnv;
+    
+    // Clean up audit service and temporary directory
+    if (auditService) {
+      await auditService.close();
+    }
+    
+    if (testAuditDir) {
+      try {
+        await fs.rm(testAuditDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   });
 
   describe('Tool Metadata Snapshots', () => {
@@ -94,7 +115,7 @@ describe('MCP Payload Snapshots', () => {
     });
 
     it('should match snapshot for use secret tool metadata', () => {
-      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
+      const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService);
       const toolDef = useSecretTool.getTool();
       
       expect(toolDef).toMatchInlineSnapshot(`
@@ -269,9 +290,9 @@ describe('MCP Payload Snapshots', () => {
     it('should match snapshot for query audit response', async () => {
       await auditService.initialize();
       
-      // Add some test audit entries
+      // Add some test audit entries (with specific timestamps to ensure predictable order)
       await auditService.write({
-        timestamp: new Date().toISOString(),
+        timestamp: '2024-01-01T10:00:00.000Z',
         secretId: 'test_api_key',
         action: 'http_get',
         outcome: 'success',
@@ -279,7 +300,7 @@ describe('MCP Payload Snapshots', () => {
       });
       
       await auditService.write({
-        timestamp: new Date().toISOString(),
+        timestamp: '2024-01-01T11:00:00.000Z',
         secretId: 'test_db_pass',
         action: 'http_post',
         outcome: 'denied',
@@ -302,13 +323,6 @@ describe('MCP Payload Snapshots', () => {
         {
           "entries": [
             {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
               "action": "http_post",
               "outcome": "denied",
               "reason": "Domain not allowed",
@@ -316,376 +330,17 @@ describe('MCP Payload Snapshots', () => {
               "timestamp": "2024-01-01T00:00:00.000Z",
             },
             {
-              "action": "http_post",
-              "domain": "api.example.com",
+              "action": "http_get",
               "outcome": "success",
               "reason": "Request completed successfully",
               "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "evil.com",
-              "outcome": "denied",
-              "reason": "Domain not allowed by policy",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "unknown",
-              "outcome": "denied",
-              "reason": "Invalid request format",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "invalid_action",
-              "domain": "unknown",
-              "outcome": "denied",
-              "reason": "Invalid request format",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "unknown",
-              "domain": "unknown",
-              "outcome": "denied",
-              "reason": "Invalid request format",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "error",
-              "reason": "Execution failed",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "denied",
-              "reason": "Policy has expired",
-              "secretId": "expired_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "denied",
-              "reason": "Rate limit exceeded",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_24",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_23",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_20",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_21",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_22",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_18",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_19",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_15",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_16",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_17",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_13",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_14",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_12",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_11",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_9",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_10",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_7",
-              "timestamp": "2024-01-01T00:00:00.000Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_8",
               "timestamp": "2024-01-01T00:00:00.000Z",
             },
           ],
-          "hasMore": true,
+          "hasMore": false,
           "page": 1,
           "pageSize": 50,
-          "totalCount": 1413,
+          "totalCount": 2,
         }
       `);
     });
@@ -800,7 +455,7 @@ describe('MCP Payload Snapshots', () => {
           "hasMore": true,
           "page": 1,
           "pageSize": 10,
-          "totalCount": 1438,
+          "totalCount": 25,
         }
       `);
     });
@@ -826,385 +481,11 @@ describe('MCP Payload Snapshots', () => {
       
       expect(result).toMatchInlineSnapshot(`
         {
-          "entries": [
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_15",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_16",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_17",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_18",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_19",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_20",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_21",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_22",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_23",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_24",
-              "timestamp": "2025-08-20T14:18:57.376Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_0",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_1",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_2",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_3",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_4",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_5",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_6",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_7",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_8",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_9",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_10",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_11",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_12",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_13",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed",
-              "secretId": "secret_14",
-              "timestamp": "2025-08-20T14:18:57.375Z",
-            },
-            {
-              "action": "http_get",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:57.369Z",
-            },
-            {
-              "action": "http_post",
-              "outcome": "denied",
-              "reason": "Domain not allowed",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:57.369Z",
-            },
-            {
-              "action": "http_post",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.635Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.634Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.628Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.622Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "evil.com",
-              "outcome": "denied",
-              "reason": "Domain not allowed by policy",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.609Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.597Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "unknown",
-              "outcome": "denied",
-              "reason": "Invalid request format",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.595Z",
-            },
-            {
-              "action": "invalid_action",
-              "domain": "unknown",
-              "outcome": "denied",
-              "reason": "Invalid request format",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.595Z",
-            },
-            {
-              "action": "unknown",
-              "domain": "unknown",
-              "outcome": "denied",
-              "reason": "Invalid request format",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.593Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "error",
-              "reason": "Execution failed",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.589Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "denied",
-              "reason": "Policy has expired",
-              "secretId": "expired_key",
-              "timestamp": "2025-08-20T14:18:50.568Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.566Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.565Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.565Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.564Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.564Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.564Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.563Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.563Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.562Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "db.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_db_pass",
-              "timestamp": "2025-08-20T14:18:50.562Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.561Z",
-            },
-            {
-              "action": "http_get",
-              "domain": "api.example.com",
-              "outcome": "success",
-              "reason": "Request completed successfully",
-              "secretId": "test_api_key",
-              "timestamp": "2025-08-20T14:18:50.559Z",
-            },
-          ],
-          "hasMore": true,
+          "entries": [],
+          "hasMore": false,
           "page": 1,
           "pageSize": 50,
-          "totalCount": 1438,
+          "totalCount": 0,
         }
       `);
     });

@@ -69,7 +69,7 @@ function createTools(services: Awaited<ReturnType<typeof createServices>>) {
   return {
     discoverTool: new DiscoverTool(secretProvider),
     describePolicyTool: new DescribePolicyTool(policyProvider),
-    useSecretTool: new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter),
+    useSecretTool: new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter, auditService),
     queryAuditTool: new QueryAuditTool(auditService)
   };
 }

@@ -89,9 +89,10 @@ export class UseSecretTool {
     private readonly secretProvider: SecretProvider & SecretAccessor,
     private readonly policyProvider: PolicyProviderService,
     private readonly actionExecutor: IActionExecutor,
-    rateLimiter?: RateLimiterService
+    rateLimiter?: RateLimiterService,
+    auditService?: AuditService
   ) {
-    this.auditService = new JsonlAuditService();
+    this.auditService = auditService || new JsonlAuditService();
     this.rateLimiter = rateLimiter || new RateLimiterService();
     
     this.tool = {
