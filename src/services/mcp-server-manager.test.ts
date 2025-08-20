@@ -377,9 +377,9 @@ describe('McpServerManager', () => {
         execute: vi.fn().mockResolvedValue({
           [TEXT.FIELD_SECRETS]: [
             { 
-              [TEXT.FIELD_SECRET_ID]: 'test_secret',
+              [TEXT.FIELD_SECRET_ID]: 'my_service_id',
               [TEXT.FIELD_AVAILABLE]: true,
-              [TEXT.FIELD_DESCRIPTION]: 'Test secret'
+              [TEXT.FIELD_DESCRIPTION]: 'My service identifier'
             }
           ]
         })
@@ -473,6 +473,8 @@ describe('McpServerManager', () => {
       if (!response) return;
       const responseData = JSON.parse(response.content[0].text);
       expect(responseData).toHaveProperty(TEXT.FIELD_SECRETS);
+      // The mock returns 1 secret but something is adding more
+      // console.log('responseData:', responseData);
       expect(responseData[TEXT.FIELD_SECRETS]).toHaveLength(1);
     });
     
@@ -491,13 +493,13 @@ describe('McpServerManager', () => {
       const response = callHandler ? await callHandler({
         params: {
           name: TEXT.TOOL_DESCRIBE,
-          arguments: { [TEXT.FIELD_SECRET_ID]: 'test_secret' }
+          arguments: { [TEXT.FIELD_SECRET_ID]: 'my_service_id' }
         }
       }) : null;
       
       expect(response?.isError).toBeUndefined();
       expect(describePolicyTool.execute).toHaveBeenCalledWith({
-        [TEXT.FIELD_SECRET_ID]: 'test_secret'
+        [TEXT.FIELD_SECRET_ID]: 'my_service_id'
       });
       
       expect(response).toBeDefined();

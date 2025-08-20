@@ -174,7 +174,26 @@ export const TEXT = {
   FIELD_VALUE_INVALID: 'invalid',
   
   // Error message defaults
-  ERROR_UNKNOWN: 'Unknown error'
+  ERROR_UNKNOWN: 'Unknown error',
+  
+  // MCP Test messages
+  TEST_MCP_HANDSHAKE: 'Testing MCP protocol handshake',
+  TEST_MCP_TOOL_DISCOVERY: 'Testing MCP tool discovery',
+  TEST_MCP_TOOL_EXECUTION: 'Testing MCP tool execution',
+  TEST_MCP_ERROR_HANDLING: 'Testing MCP error handling',
+  TEST_MCP_CONCURRENT_REQUESTS: 'Testing MCP concurrent requests',
+  TEST_MCP_PAYLOAD_SNAPSHOT: 'Testing MCP payload snapshot',
+  TEST_MCP_PROTOCOL_FLOW: 'Testing MCP protocol flow',
+  TEST_MCP_RATE_LIMITING: 'Testing MCP rate limiting',
+  TEST_MCP_AUDIT_TRAIL: 'Testing MCP audit trail verification',
+  
+  // Test descriptions for snapshots
+  SNAPSHOT_DESC_TOOL_METADATA: 'Tool metadata snapshot',
+  SNAPSHOT_DESC_SUCCESS_RESPONSE: 'Successful response snapshot',
+  SNAPSHOT_DESC_ERROR_RESPONSE: 'Error response snapshot',
+  SNAPSHOT_DESC_EMPTY_RESPONSE: 'Empty response snapshot',
+  SNAPSHOT_DESC_PAGINATION: 'Pagination snapshot',
+  SNAPSHOT_DESC_COMPLEX_OBJECT: 'Complex object snapshot'
 } as const;
 
 export type TextKey = keyof typeof TEXT;
