@@ -19,7 +19,9 @@
     "test:coverage": "vitest --coverage",
     "test:once": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "generate:schema": "tsx scripts/generate-schema.ts",
+    "validate:config": "tsx src/cli/validate-config.ts"
   },
   "keywords": [
     "mcp",
@@ -41,6 +43,7 @@
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "zod-to-json-schema": "^3.24.1"
   }
 }

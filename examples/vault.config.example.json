@@ -1,0 +1,82 @@
+{
+  "version": "1.0.0",
+  "mappings": [
+    {
+      "secretId": "github-api-key",
+      "envVar": "GITHUB_API_KEY",
+      "description": "GitHub API key for repository operations"
+    },
+    {
+      "secretId": "openai-api-key",
+      "envVar": "OPENAI_API_KEY",
+      "description": "OpenAI API key for AI operations"
+    },
+    {
+      "secretId": "stripe-api-key",
+      "envVar": "STRIPE_API_KEY",
+      "description": "Stripe API key for payment processing"
+    },
+    {
+      "secretId": "sendgrid-api-key",
+      "envVar": "SENDGRID_API_KEY",
+      "description": "SendGrid API key for email services"
+    }
+  ],
+  "policies": [
+    {
+      "secretId": "github-api-key",
+      "allowedActions": ["http_get", "http_post"],
+      "allowedDomains": [
+        "api.github.com",
+        "github.com"
+      ],
+      "rateLimit": {
+        "requests": 5000,
+        "windowSeconds": 3600
+      }
+    },
+    {
+      "secretId": "openai-api-key",
+      "allowedActions": ["http_post"],
+      "allowedDomains": [
+        "api.openai.com"
+      ],
+      "rateLimit": {
+        "requests": 100,
+        "windowSeconds": 60
+      },
+      "expiresAt": "2025-12-31T23:59:59Z"
+    },
+    {
+      "secretId": "stripe-api-key",
+      "allowedActions": ["http_get", "http_post"],
+      "allowedDomains": [
+        "api.stripe.com"
+      ],
+      "rateLimit": {
+        "requests": 1000,
+        "windowSeconds": 3600
+      }
+    },
+    {
+      "secretId": "sendgrid-api-key",
+      "allowedActions": ["http_post"],
+      "allowedDomains": [
+        "api.sendgrid.com"
+      ],
+      "rateLimit": {
+        "requests": 100,
+        "windowSeconds": 60
+      }
+    }
+  ],
+  "settings": {
+    "auditDir": "audit",
+    "maxFileSizeMb": 100,
+    "maxFileAgeDays": 30,
+    "defaultRateLimit": {
+      "requests": 100,
+      "windowSeconds": 3600
+    }
+  }
+}

@@ -15,14 +15,14 @@ export class EnvSecretProvider implements SecretProvider, SecretAccessor {
   private readonly mappings: ReadonlyMap<string, ValidatedMapping>;
   private readonly secretIds: readonly string[];
 
-  constructor(mappings: SecretMapping[]) {
+  constructor(mappings: readonly SecretMapping[]) {
     const validated = this.validateAndNormalizeMappings(mappings);
     this.mappings = Object.freeze(new Map(validated));
     this.secretIds = Object.freeze(Array.from(this.mappings.keys()).sort());
   }
 
   private validateAndNormalizeMappings(
-    mappings: SecretMapping[]
+    mappings: readonly SecretMapping[]
   ): Array<[string, ValidatedMapping]> {
     const seen = new Set<string>();
     const result: Array<[string, ValidatedMapping]> = [];

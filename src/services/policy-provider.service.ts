@@ -32,6 +32,11 @@ export class PolicyProviderService implements PolicyProvider {
     this.evaluator = new PolicyEvaluatorService(policies);
   }
 
+  async loadPoliciesFromConfig(policies: readonly PolicyConfig[]): Promise<void> {
+    this.validator.validateAll(policies as PolicyConfig[]);
+    this.evaluator = new PolicyEvaluatorService(policies as PolicyConfig[]);
+  }
+
   evaluate(secretId: string, action: string, domain: string): PolicyEvaluationResult {
     if (!this.evaluator) {
       return {

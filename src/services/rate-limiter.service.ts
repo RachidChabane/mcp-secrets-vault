@@ -16,8 +16,8 @@ interface RateLimitResult {
 
 export class RateLimiterService {
   private readonly windows = new Map<string, RateLimitWindow>();
-  private readonly defaultLimit: number;
-  private readonly defaultWindowSeconds: number;
+  private defaultLimit: number;
+  private defaultWindowSeconds: number;
   private cleanupTimer: NodeJS.Timeout;
 
   constructor(
@@ -29,6 +29,23 @@ export class RateLimiterService {
     
     // Cleanup old windows periodically
     this.cleanupTimer = setInterval(() => this.cleanup(), CONFIG.RATE_LIMIT_CLEANUP_INTERVAL_MS);
+  }
+
+  setDefaultLimit(requests: number, windowSeconds: number): void {
+    if (requests <= 0 || !Number.isFinite(requests)) {
+      throw new ToolError(
+        TEXT.ERROR_INVALID_RATE_LIMIT,
+        CONFIG.ERROR_CODE_INVALID_REQUEST
+      );
+    }
+    if (windowSeconds <= 0 || !Number.isFinite(windowSeconds)) {
+      throw new ToolError(
+        TEXT.ERROR_INVALID_RATE_LIMIT,
+        CONFIG.ERROR_CODE_INVALID_REQUEST
+      );
+    }
+    this.defaultLimit = requests;
+    this.defaultWindowSeconds = windowSeconds;
   }
 
   checkLimit(

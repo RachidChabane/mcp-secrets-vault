@@ -102,3 +102,18 @@ export function writeError(message: string, context: LogContext = {}): void {
   // Write to stderr as structured JSON
   console.error(JSON.stringify(logEntry));
 }
+
+export function writeInfo(message: string, context: LogContext = {}): void {
+  const { level = CONFIG.LOG_LEVEL_INFO, ...rest } = context;
+  
+  const redactedRest = redactValue(rest);
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    level,
+    message: redactValue(message),
+    ...(typeof redactedRest === 'object' && redactedRest !== null ? redactedRest : {})
+  };
+  
+  // Write to stdout as structured JSON for info logs
+  console.log(JSON.stringify(logEntry));
+}
