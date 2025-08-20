@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { VaultConfigSchema, containsWildcards } from '../schemas/config.schema.js';
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
+import { SCHEMA_VERSION } from '../constants/version.js';
+import { fmt } from '../utils/format.js';
 import { ToolError } from '../utils/errors.js';
 
 export interface ConfigValidator {
@@ -22,7 +24,7 @@ export class ConfigValidatorService implements ConfigValidator {
       if (error instanceof z.ZodError) {
         const messages = this.formatZodErrors(error);
         throw new ToolError(
-          `Configuration validation failed:\n${messages.join('\n')}`,
+          `${TEXT.CONFIG_VALIDATOR_VALIDATION_FAILED}\n${messages.join('\n')}`,
           CONFIG.ERROR_CODE_INVALID_REQUEST
         );
       }
@@ -39,7 +41,7 @@ export class ConfigValidatorService implements ConfigValidator {
     // Explicit wildcard rejection with clear message (check first!)
     if (containsWildcards(trimmed)) {
       throw new ToolError(
-        "Wildcards not allowed. Use exact FQDNs only (e.g., 'api.example.com')",
+        TEXT.CONFIG_VALIDATOR_WILDCARDS_NOT_ALLOWED,
         CONFIG.ERROR_CODE_INVALID_REQUEST
       );
     }
@@ -118,12 +120,12 @@ export class ConfigValidatorService implements ConfigValidator {
       if (message.includes('Wildcards not allowed')) {
         message = `${path}: ${message}`;
       } else if (path.includes('allowedDomains') && issue.code === 'invalid_string') {
-        message = `${path}: Domain must be an exact FQDN (no wildcards). Example: 'api.example.com'`;
+        message = `${path}: ${TEXT.CONFIG_VALIDATOR_DOMAIN_MUST_BE_FQDN}`;
       } else if (path.includes('allowedActions') && issue.code === 'invalid_enum_value') {
         const supportedActions = CONFIG.SUPPORTED_ACTIONS.join(', ');
-        message = `${path}: Invalid action. Supported actions: ${supportedActions}`;
+        message = `${path}: ${fmt(TEXT.CONFIG_VALIDATOR_INVALID_ACTION, { actions: supportedActions })}`;
       } else if (path === 'version' && issue.code === 'invalid_literal') {
-        message = `${path}: Must be '1.0.0' (current schema version)`;
+        message = `${path}: ${fmt(TEXT.CONFIG_VALIDATOR_VERSION_MUST_BE, { version: SCHEMA_VERSION })}`;
       } else {
         message = `${path}: ${message}`;
       }
@@ -133,7 +135,7 @@ export class ConfigValidatorService implements ConfigValidator {
     
     // Add helpful context if there are domain-related errors
     if (messages.some(m => m.includes('Domain') || m.includes('allowedDomains'))) {
-      messages.push('\nNote: All domains must be exact FQDNs. Wildcards (*, ?, []) are not allowed.');
+      messages.push(TEXT.CONFIG_VALIDATOR_NOTE_DOMAINS);
     }
     
     return messages;
@@ -150,7 +152,7 @@ export class ConfigValidatorService implements ConfigValidator {
       const id = mapping.secretId.trim();
       if (seenIds.has(id)) {
         throw new ToolError(
-          `Duplicate secret ID found: ${id}`,
+          fmt(TEXT.CONFIG_VALIDATOR_DUPLICATE_SECRET, { id }),
           CONFIG.ERROR_CODE_INVALID_REQUEST
         );
       }
@@ -163,7 +165,7 @@ export class ConfigValidatorService implements ConfigValidator {
       const id = policy.secretId.trim();
       if (policyIds.has(id)) {
         throw new ToolError(
-          `Duplicate policy for secret ID: ${id}`,
+          fmt(TEXT.CONFIG_VALIDATOR_DUPLICATE_POLICY, { id }),
           CONFIG.ERROR_CODE_INVALID_REQUEST
         );
       }

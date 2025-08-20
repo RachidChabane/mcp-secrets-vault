@@ -282,7 +282,7 @@ describe('ConfigValidatorService', () => {
         service.validate(config);
         expect.fail('Should have thrown');
       } catch (error: any) {
-        expect(error.message).toContain("Must be '1.0.0'");
+        expect(error.message).toContain("Must be 1.0.0 (current schema version)");
       }
     });
   });

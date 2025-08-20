@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
+import { SCHEMA_VERSION } from '../constants/version.js';
 
 // Custom refinement to explicitly reject wildcard patterns
 const exactFqdnString = z.string()
@@ -21,7 +22,7 @@ const exactFqdnString = z.string()
       return CONFIG.DOMAIN_REGEX.test(domain);
     },
     {
-      message: "Wildcards not allowed. Use exact FQDNs only (e.g., 'api.example.com')"
+      message: TEXT.CONFIG_VALIDATOR_WILDCARDS_NOT_ALLOWED
     }
   );
 
@@ -36,7 +37,7 @@ const SecretMappingSchema = z.object({
   envVar: z.string()
     .min(CONFIG.MIN_ENV_VAR_LENGTH)
     .regex(CONFIG.ENV_VAR_REGEX, {
-      message: "Environment variable must be uppercase with underscores"
+      message: TEXT.CONFIG_VALIDATOR_ENV_VAR_FORMAT
     }),
   description: z.string().optional()
 });
@@ -77,7 +78,7 @@ const SettingsSchema = z.object({
 
 // Main config schema
 export const VaultConfigSchema = z.object({
-  version: z.literal("1.0.0"),
+  version: z.literal(SCHEMA_VERSION),
   mappings: z.array(SecretMappingSchema).default([]),
   policies: z.array(PolicyConfigSchema).default([]),
   settings: SettingsSchema
@@ -90,7 +91,7 @@ export type VaultConfig = z.infer<typeof VaultConfigSchema>;
 
 // Frozen config type for immutable configurations
 export type FrozenVaultConfig = {
-  readonly version: "1.0.0";
+  readonly version: typeof SCHEMA_VERSION;
   readonly mappings: ReadonlyArray<Readonly<SecretMappingConfig>>;
   readonly policies: ReadonlyArray<Readonly<PolicyConfigFromSchema>>;
   readonly settings?: Readonly<{

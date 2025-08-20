@@ -242,7 +242,57 @@ export const TEXT = {
   DOCTOR_WARNINGS: 'Warnings',
   DOCTOR_ERRORS: 'Errors',
   DOCTOR_RUNNING_CHECK: 'Running check',
-  DOCTOR_HELP_TEXT: 'Use this tool to diagnose configuration and setup issues'
+  DOCTOR_HELP_TEXT: 'Use this tool to diagnose configuration and setup issues',
+  
+  // Index.ts
+  DOCTOR_CLI_FAILED: 'Doctor CLI failed',
+  
+  // Doctor check names
+  DOCTOR_CHECK_CONFIG_SCHEMA: 'Configuration Schema',
+  DOCTOR_CHECK_ENV_VARS: 'Environment Variables',
+  DOCTOR_CHECK_DOMAINS: 'Domain Configuration',
+  DOCTOR_CHECK_RATE_LIMITS: 'Rate Limits',
+  DOCTOR_CHECK_AUDIT_DIR: 'Audit Directory',
+  DOCTOR_CHECK_POLICY_STATUS: 'Policy Status',
+  
+  // Doctor messages (ALL literals must be replaced)
+  DOCTOR_ENV_ALL_SET: 'All {count} secrets have configured environment variables',
+  DOCTOR_ENV_NONE_SET: 'No environment variables are set',
+  DOCTOR_DOMAIN_HAS_ISSUES: 'Domain configuration has issues',
+  DOCTOR_LIMITS_NEED_ADJUSTMENT: 'Some rate limits may need adjustment',
+  DOCTOR_AUDIT_WRITABLE_WITH_WARNINGS: 'Audit directory is writable but has warnings',
+  DOCTOR_AUDIT_WRITABLE: 'Audit directory is writable: {path}',
+  DOCTOR_POLICIES_ALL_VALID: 'All policies are valid and properly mapped',
+  DOCTOR_POLICIES_NEED_ATTENTION: 'Policy configuration needs attention',
+  DOCTOR_DOMAIN_COUNT_INFO: 'Total unique domains: {count}',
+  DOCTOR_LIMIT_WINDOW_SHORT: 'Window too short ({seconds}s)',
+  DOCTOR_LIMIT_WINDOW_LONG: 'Window too long ({seconds}s)',
+  DOCTOR_NO_DOMAINS_CONFIGURED: '{secretId}: No domains configured',
+  DOCTOR_TOO_MANY_DOMAINS: '{secretId}: Too many domains ({count})',
+  DOCTOR_ANALYZING: 'Analyzing: {path}',
+  DOCTOR_VERSION_INFO: 'Version: {version}',
+  DOCTOR_MAPPINGS_INFO: 'Mappings: {count}',
+  DOCTOR_POLICIES_INFO: 'Policies: {count}',
+  
+  // Config validator messages
+  CONFIG_VALIDATOR_VERSION_MUST_BE: 'Must be {version} (current schema version)',
+  CONFIG_VALIDATOR_WILDCARDS_NOT_ALLOWED: "Wildcards not allowed. Use exact FQDNs only (e.g., 'api.example.com')",
+  CONFIG_VALIDATOR_VALIDATION_FAILED: 'Configuration validation failed:',
+  CONFIG_VALIDATOR_DUPLICATE_SECRET: 'Duplicate secret ID found: {id}',
+  CONFIG_VALIDATOR_DUPLICATE_POLICY: 'Duplicate policy for secret ID: {id}',
+  CONFIG_VALIDATOR_DOMAIN_MUST_BE_FQDN: 'Domain must be an exact FQDN (no wildcards). Example: api.example.com',
+  CONFIG_VALIDATOR_INVALID_ACTION: 'Invalid action. Supported actions: {actions}',
+  CONFIG_VALIDATOR_NOTE_DOMAINS: 'Note: All domains must be exact FQDNs. Wildcards (*, ?, []) are not allowed.',
+  CONFIG_VALIDATOR_ENV_VAR_FORMAT: 'Environment variable must be uppercase with underscores',
+  
+  // Validate-config messages (if needed for consistency)
+  VALIDATE_HEADER: 'MCP Secrets Vault - Configuration Validator',
+  VALIDATE_CHECKING_FILE: 'Validating: {path}',
+  VALIDATE_FILE_EXISTS: 'File exists',
+  VALIDATE_FILE_NOT_FOUND: 'File not found',
+  VALIDATE_LOADING: 'Loading configuration...',
+  VALIDATE_VALIDATING: 'Validating structure...',
+  VALIDATE_STRUCTURE_VALID: 'Configuration structure is valid'
 } as const;
 
 export type TextKey = keyof typeof TEXT;

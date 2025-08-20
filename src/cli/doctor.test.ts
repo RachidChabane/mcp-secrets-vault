@@ -185,7 +185,7 @@ describe('DoctorCLI', () => {
       // Check output contains warning about missing env var
       const output = consoleLogs.join('\n');
       expect(output).toContain(TEXT.DOCTOR_SECRET_NOT_IN_ENV);
-      expect(output).toContain('SECRET_TWO');
+      expect(output).toContain('secret2');
     });
     
     it('should report ERROR when all environment variables are missing', async () => {
@@ -676,6 +676,87 @@ describe('DoctorCLI', () => {
       
       const output = consoleLogs.join('\n');
       expect(output).toContain(TEXT.DOCTOR_CHECK_ERRORS);
+    });
+    
+    it('should never expose environment variable names in output', async () => {
+      const mockConfig = {
+        version: '1.0.0',
+        mappings: [
+          { secretId: 'db_secret', envVar: 'DB_PASSWORD', description: 'Database' },
+          { secretId: 'api_key', envVar: 'STRIPE_SECRET_KEY', description: 'Stripe' },
+          { secretId: 'auth_token', envVar: 'JWT_SIGNING_SECRET', description: 'JWT' },
+          { secretId: 'oauth_secret', envVar: 'OAUTH_CLIENT_SECRET', description: 'OAuth' }
+        ],
+        policies: [
+          { secretId: 'db_secret', allowedActions: ['http_get'], allowedDomains: ['api.example.com'] }
+        ],
+        settings: {}
+      };
+
+      // Set some ENV vars but not all
+      process.env['DB_PASSWORD'] = 'test123';
+      process.env['JWT_SIGNING_SECRET'] = 'secret456';
+      delete process.env['STRIPE_SECRET_KEY'];
+      delete process.env['OAUTH_CLIENT_SECRET'];
+
+      // Mock fs.access to succeed
+      (fs.access as any).mockResolvedValue(undefined);
+
+      // Mock ConfigLoaderService to return our test config
+      const { ConfigLoaderService } = await import('../services/config-loader.service.js');
+      (ConfigLoaderService as any).mockImplementation(() => ({
+        loadConfig: vi.fn().mockResolvedValue(mockConfig)
+      }));
+
+      // Mock ConfigValidatorService
+      const { ConfigValidatorService } = await import('../services/config-validator.service.js');
+      (ConfigValidatorService as any).mockImplementation(() => ({
+        validate: vi.fn()
+      }));
+
+      // Capture console output
+      const originalLog = console.log;
+      const capturedOutput: string[] = [];
+      console.log = vi.fn((...args) => {
+        capturedOutput.push(args.join(' '));
+      });
+
+      try {
+        const doctor = new DoctorCLI();
+        await doctor.run();
+
+        const fullOutput = capturedOutput.join('\n');
+
+        // CRITICAL: Assert NONE of the actual ENV var names appear
+        const allEnvVarNames = mockConfig.mappings.map(m => m.envVar);
+        for (const envVar of allEnvVarNames) {
+          expect(fullOutput).not.toContain(envVar);
+          // Also check case-insensitive
+          expect(fullOutput.toLowerCase()).not.toContain(envVar.toLowerCase());
+        }
+
+        // Secondary check: no common secret patterns
+        expect(fullOutput).not.toMatch(/DB_PASSWORD/);
+        expect(fullOutput).not.toMatch(/STRIPE_SECRET_KEY/);
+        expect(fullOutput).not.toMatch(/JWT_SIGNING_SECRET/);
+        expect(fullOutput).not.toMatch(/OAUTH_CLIENT_SECRET/);
+
+        // Generic pattern check
+        expect(fullOutput).not.toMatch(/[A-Z][A-Z0-9_]*_(PASSWORD|SECRET|KEY|TOKEN|CREDENTIAL|API)/);
+
+        // Should see at least some secretIds in the output (in warnings or elsewhere)
+        // But the key test is that ENV var names are never exposed
+        const hasSecretIds = fullOutput.includes('api_key') || 
+                            fullOutput.includes('auth_token') || 
+                            fullOutput.includes('oauth_secret');
+        expect(hasSecretIds).toBe(true);
+
+      } finally {
+        console.log = originalLog;
+        // Clean up ENV
+        delete process.env['DB_PASSWORD'];
+        delete process.env['JWT_SIGNING_SECRET'];
+      }
     });
   });
 });

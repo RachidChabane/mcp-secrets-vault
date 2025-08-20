@@ -5,6 +5,7 @@ import { ConfigLoaderService } from '../services/config-loader.service.js';
 import { ConfigValidatorService } from '../services/config-validator.service.js';
 import { CONFIG } from '../constants/config-constants.js';
 import { TEXT } from '../constants/text-constants.js';
+import { fmt } from '../utils/format.js';
 
 // ANSI color codes for terminal output
 const colors = {
@@ -71,7 +72,7 @@ export class DoctorCLI {
   
   async run(): Promise<void> {
     printHeader(TEXT.DOCTOR_HEADER);
-    console.log(`Analyzing: ${colorize(this.configPath, 'yellow')}\n`);
+    console.log(colorize(fmt(TEXT.DOCTOR_ANALYZING, { path: this.configPath }), 'yellow') + '\n');
     
     // Run all diagnostic checks
     await this.checkConfigSchema();
@@ -106,26 +107,26 @@ export class DoctorCLI {
       validator.validate(config);
       
       this.results.push({
-        check: 'Configuration Schema',
+        check: TEXT.DOCTOR_CHECK_CONFIG_SCHEMA,
         status: 'OK',
         message: TEXT.DOCTOR_CONFIG_VALID,
         details: [
-          `Version: ${config.version}`,
-          `Mappings: ${config.mappings.length}`,
-          `Policies: ${config.policies.length}`
+          fmt(TEXT.DOCTOR_VERSION_INFO, { version: config.version }),
+          fmt(TEXT.DOCTOR_MAPPINGS_INFO, { count: config.mappings.length }),
+          fmt(TEXT.DOCTOR_POLICIES_INFO, { count: config.policies.length })
         ]
       });
     } catch (error: any) {
       if (error.code === CONFIG.FS_ERROR_ENOENT) {
         this.results.push({
-          check: 'Configuration Schema',
+          check: TEXT.DOCTOR_CHECK_CONFIG_SCHEMA,
           status: 'ERROR',
           message: TEXT.DOCTOR_CONFIG_NOT_FOUND,
           details: [`File not found: ${this.configPath}`]
         });
       } else {
         this.results.push({
-          check: 'Configuration Schema',
+          check: TEXT.DOCTOR_CHECK_CONFIG_SCHEMA,
           status: 'ERROR',
           message: TEXT.DOCTOR_CONFIG_INVALID,
           details: [error.message]
@@ -146,31 +147,31 @@ export class DoctorCLI {
       
       for (const mapping of config.mappings) {
         if (process.env[mapping.envVar]) {
-          setVars.push(`${mapping.secretId} → ${mapping.envVar}`);
+          setVars.push(mapping.secretId);
         } else {
-          missingVars.push(`${mapping.secretId} → ${mapping.envVar}`);
+          missingVars.push(mapping.secretId);
         }
       }
       
       if (missingVars.length === 0) {
         this.results.push({
-          check: 'Environment Variables',
+          check: TEXT.DOCTOR_CHECK_ENV_VARS,
           status: 'OK',
-          message: `All ${setVars.length} mapped variables are set`,
+          message: fmt(TEXT.DOCTOR_ENV_ALL_SET, { count: setVars.length }),
           details: setVars
         });
       } else if (missingVars.length < config.mappings.length) {
         this.results.push({
-          check: 'Environment Variables',
+          check: TEXT.DOCTOR_CHECK_ENV_VARS,
           status: 'WARN',
           message: TEXT.DOCTOR_SECRET_NOT_IN_ENV,
           details: missingVars
         });
       } else {
         this.results.push({
-          check: 'Environment Variables',
+          check: TEXT.DOCTOR_CHECK_ENV_VARS,
           status: 'ERROR',
-          message: 'No environment variables are set',
+          message: TEXT.DOCTOR_ENV_NONE_SET,
           details: missingVars
         });
       }
@@ -207,25 +208,25 @@ export class DoctorCLI {
         
         // Check domain count
         if (policy.allowedDomains.length < CONFIG.DOCTOR_MIN_DOMAIN_COUNT) {
-          domainIssues.push(`${policy.secretId}: No domains configured`);
+          domainIssues.push(fmt(TEXT.DOCTOR_NO_DOMAINS_CONFIGURED, { secretId: policy.secretId }));
         }
         if (policy.allowedDomains.length > CONFIG.DOCTOR_MAX_DOMAIN_COUNT) {
-          domainIssues.push(`${policy.secretId}: Too many domains (${policy.allowedDomains.length})`);
+          domainIssues.push(fmt(TEXT.DOCTOR_TOO_MANY_DOMAINS, { secretId: policy.secretId, count: policy.allowedDomains.length }));
         }
       }
       
       if (domainIssues.length === 0) {
         this.results.push({
-          check: 'Domain Configuration',
+          check: TEXT.DOCTOR_CHECK_DOMAINS,
           status: 'OK',
           message: TEXT.DOCTOR_DOMAIN_VALID,
-          details: [`Total unique domains: ${allDomains.size}`]
+          details: [fmt(TEXT.DOCTOR_DOMAIN_COUNT_INFO, { count: allDomains.size })]
         });
       } else {
         this.results.push({
-          check: 'Domain Configuration',
+          check: TEXT.DOCTOR_CHECK_DOMAINS,
           status: 'WARN',
-          message: 'Domain configuration has issues',
+          message: TEXT.DOCTOR_DOMAIN_HAS_ISSUES,
           details: domainIssues
         });
       }
@@ -254,25 +255,25 @@ export class DoctorCLI {
             limitIssues.push(`${policy.secretId}: ${TEXT.DOCTOR_LIMIT_TOO_HIGH} (${requests} requests)`);
           }
           if (windowSeconds < CONFIG.DOCTOR_RATE_LIMIT_MIN_WINDOW) {
-            limitIssues.push(`${policy.secretId}: Window too short (${windowSeconds}s)`);
+            limitIssues.push(`${policy.secretId}: ${fmt(TEXT.DOCTOR_LIMIT_WINDOW_SHORT, { seconds: windowSeconds })}`);
           }
           if (windowSeconds > CONFIG.DOCTOR_RATE_LIMIT_MAX_WINDOW) {
-            limitIssues.push(`${policy.secretId}: Window too long (${windowSeconds}s)`);
+            limitIssues.push(`${policy.secretId}: ${fmt(TEXT.DOCTOR_LIMIT_WINDOW_LONG, { seconds: windowSeconds })}`);
           }
         }
       }
       
       if (limitIssues.length === 0) {
         this.results.push({
-          check: 'Rate Limits',
+          check: TEXT.DOCTOR_CHECK_RATE_LIMITS,
           status: 'OK',
           message: TEXT.DOCTOR_LIMIT_REASONABLE
         });
       } else {
         this.results.push({
-          check: 'Rate Limits',
+          check: TEXT.DOCTOR_CHECK_RATE_LIMITS,
           status: 'WARN',
-          message: 'Some rate limits may need adjustment',
+          message: TEXT.DOCTOR_LIMITS_NEED_ADJUSTMENT,
           details: limitIssues
         });
       }
@@ -300,16 +301,16 @@ export class DoctorCLI {
         
         if (warnings.length > 0) {
           this.results.push({
-            check: 'Audit Directory',
+            check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
             status: 'WARN',
-            message: 'Audit directory is writable but has warnings',
+            message: TEXT.DOCTOR_AUDIT_WRITABLE_WITH_WARNINGS,
             details: warnings
           });
         } else {
           this.results.push({
-            check: 'Audit Directory',
+            check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
             status: 'OK',
-            message: `Audit directory is writable: ${auditDir}`
+            message: fmt(TEXT.DOCTOR_AUDIT_WRITABLE, { path: auditDir })
           });
         }
       } catch {
@@ -317,14 +318,14 @@ export class DoctorCLI {
         try {
           await fs.mkdir(auditDir, { recursive: true });
           this.results.push({
-            check: 'Audit Directory',
+            check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
             status: 'OK',
             message: TEXT.DOCTOR_AUDIT_DIR_CREATED,
             details: [`Created: ${auditDir}`]
           });
         } catch (error: any) {
           this.results.push({
-            check: 'Audit Directory',
+            check: TEXT.DOCTOR_CHECK_AUDIT_DIR,
             status: 'ERROR',
             message: TEXT.DOCTOR_AUDIT_DIR_NOT_WRITABLE,
             details: [error.message]
@@ -374,9 +375,9 @@ export class DoctorCLI {
       
       if (expirationIssues.length === 0) {
         this.results.push({
-          check: 'Policy Status',
+          check: TEXT.DOCTOR_CHECK_POLICY_STATUS,
           status: 'OK',
-          message: 'All policies are valid and properly mapped'
+          message: TEXT.DOCTOR_POLICIES_ALL_VALID
         });
       } else {
         const hasErrors = expirationIssues.some(issue => 
@@ -385,9 +386,9 @@ export class DoctorCLI {
         );
         
         this.results.push({
-          check: 'Policy Status',
+          check: TEXT.DOCTOR_CHECK_POLICY_STATUS,
           status: hasErrors ? 'ERROR' : 'WARN',
-          message: 'Policy configuration needs attention',
+          message: TEXT.DOCTOR_POLICIES_NEED_ATTENTION,
           details: expirationIssues
         });
       }

@@ -107,7 +107,7 @@ if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
       const doctor = new DoctorCLI(args[1]);
       return doctor.run();
     }).catch(() => {
-      writeError('Doctor CLI failed', {
+      writeError(TEXT.DOCTOR_CLI_FAILED, {
         level: CONFIG.LOG_LEVEL_ERROR,
         code: CONFIG.ERROR_CODE_INVALID_REQUEST
       });
