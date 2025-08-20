@@ -473,8 +473,8 @@ describe('McpServerManager', () => {
       if (!response) return;
       const responseData = JSON.parse(response.content[0].text);
       expect(responseData).toHaveProperty(TEXT.FIELD_SECRETS);
-      // The mock returns 1 secret but something is adding more
-      // console.log('responseData:', responseData);
+      // Secrets field should contain the actual array
+      expect(responseData[TEXT.FIELD_SECRETS]).toBeInstanceOf(Array);
       expect(responseData[TEXT.FIELD_SECRETS]).toHaveLength(1);
     });
     
