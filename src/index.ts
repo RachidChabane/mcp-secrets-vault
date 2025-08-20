@@ -99,13 +99,30 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
-  main().catch(() => {
-    writeError(TEXT.ERROR_INVALID_CONFIG, { 
-      level: CONFIG.LOG_LEVEL_ERROR,
-      code: CONFIG.ERROR_CODE_INVALID_REQUEST
+  // Check if running doctor command
+  const args = process.argv.slice(2);
+  if (args[0] === 'doctor') {
+    // Import and run doctor CLI
+    import('./cli/doctor.js').then(({ DoctorCLI }) => {
+      const doctor = new DoctorCLI(args[1]);
+      return doctor.run();
+    }).catch(() => {
+      writeError('Doctor CLI failed', {
+        level: CONFIG.LOG_LEVEL_ERROR,
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST
+      });
+      process.exit(CONFIG.EXIT_CODE_ERROR);
     });
-    process.exit(CONFIG.EXIT_CODE_ERROR);
-  });
+  } else {
+    // Run MCP server normally
+    main().catch(() => {
+      writeError(TEXT.ERROR_INVALID_CONFIG, { 
+        level: CONFIG.LOG_LEVEL_ERROR,
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST
+      });
+      process.exit(CONFIG.EXIT_CODE_ERROR);
+    });
+  }
 }
 
 export { main };

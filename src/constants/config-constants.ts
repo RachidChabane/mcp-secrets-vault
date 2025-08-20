@@ -227,7 +227,19 @@ export const CONFIG = {
   JSON_SCHEMA_ID_PREFIX: 'mcp-secrets-vault',
   JSON_SCHEMA_VERSION: 'v1.0.0',
   JSON_SCHEMA_FILENAME: 'vault.config.schema.json',
-  JSON_SCHEMA_NAME: 'VaultConfig'
+  JSON_SCHEMA_NAME: 'VaultConfig',
+  
+  // Doctor CLI thresholds
+  DOCTOR_RATE_LIMIT_MIN_REQUESTS: 10,
+  DOCTOR_RATE_LIMIT_MAX_REQUESTS: 10000,
+  DOCTOR_RATE_LIMIT_MIN_WINDOW: 60,
+  DOCTOR_RATE_LIMIT_MAX_WINDOW: 86400,
+  DOCTOR_FILE_SIZE_WARN_MB: 500,
+  DOCTOR_FILE_AGE_WARN_DAYS: 90,
+  DOCTOR_POLICY_EXPIRING_SOON_DAYS: 7,
+  DOCTOR_MIN_DOMAIN_COUNT: 1,
+  DOCTOR_MAX_DOMAIN_COUNT: 100,
+  DOCTOR_SUSPICIOUS_DOMAIN_PATTERNS: ['localhost', '127.0.0.1', '0.0.0.0', 'test.com', 'example.com'] as const
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG;
