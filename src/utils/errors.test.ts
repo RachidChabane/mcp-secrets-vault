@@ -156,7 +156,7 @@ describe('ConfigurationError', () => {
 
 describe('SecretNotFoundError', () => {
   it('should create error with secretId', () => {
-    const error = new SecretNotFoundError('SECRET_123');
+    const error = new SecretNotFoundError('my_db_connection');
     
     expect(error).toBeInstanceOf(Error);
     expect(error).toBeInstanceOf(VaultError);
@@ -164,30 +164,30 @@ describe('SecretNotFoundError', () => {
     expect(error.name).toBe('SecretNotFoundError');
     expect(error.code).toBe(CONFIG.ERROR_CODE_UNKNOWN_SECRET);
     expect(error.message).toBe(TEXT.ERROR_UNKNOWN_SECRET);
-    expect(error.context).toEqual({ secretId: 'SECRET_123' });
+    expect(error.context).toEqual({ secretId: 'my_db_connection' });
   });
 
   it('should always use standard error code and message', () => {
-    const error = new SecretNotFoundError('ANY_SECRET');
+    const error = new SecretNotFoundError('some_id');
     
     expect(error.code).toBe(CONFIG.ERROR_CODE_UNKNOWN_SECRET);
     expect(error.message).toBe(TEXT.ERROR_UNKNOWN_SECRET);
   });
 
   it('should serialize to JSON correctly', () => {
-    const error = new SecretNotFoundError('MY_SECRET');
+    const error = new SecretNotFoundError('my_service_id');
     const json = error.toJSON();
     
     expect(json).toEqual({
       name: 'SecretNotFoundError',
       code: CONFIG.ERROR_CODE_UNKNOWN_SECRET,
       message: TEXT.ERROR_UNKNOWN_SECRET,
-      context: { secretId: 'MY_SECRET' }
+      context: { secretId: 'my_service_id' }
     });
   });
 
   it('should maintain proper prototype chain', () => {
-    const error = new SecretNotFoundError('SECRET');
+    const error = new SecretNotFoundError('some_id');
     
     expect(error instanceof Error).toBe(true);
     expect(error instanceof VaultError).toBe(true);
@@ -256,7 +256,7 @@ describe('Error inheritance', () => {
     const errors = [
       new ValidationError('VAL_ERROR', 'Validation'),
       new ConfigurationError('Config'),
-      new SecretNotFoundError('SECRET'),
+      new SecretNotFoundError('some_id'),
       new ToolError('Tool', 'TOOL_ERROR'),
     ];
 
@@ -271,7 +271,7 @@ describe('Error inheritance', () => {
       new VaultError('CODE', 'Message'),
       new ValidationError('CODE', 'Message'),
       new ConfigurationError('Message'),
-      new SecretNotFoundError('SECRET'),
+      new SecretNotFoundError('some_id'),
       new ToolError('Message', 'CODE'),
     ];
 

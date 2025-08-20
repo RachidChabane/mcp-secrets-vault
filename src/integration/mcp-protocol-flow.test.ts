@@ -10,7 +10,6 @@ import { PolicyProviderService } from '../services/policy-provider.service.js';
 import { HttpActionExecutor } from '../services/http-action-executor.service.js';
 import { RateLimiterService } from '../services/rate-limiter.service.js';
 import { JsonlAuditService } from '../services/audit-service.js';
-import { PolicyEvaluatorService } from '../services/policy-evaluator.service.js';
 import { ToolError } from '../utils/errors.js';
 import { PolicyConfig } from '../interfaces/policy.interface.js';
 
@@ -21,7 +20,6 @@ describe('MCP Protocol Flow Tests', () => {
   let actionExecutor: HttpActionExecutor;
   let rateLimiter: RateLimiterService;
   let auditService: JsonlAuditService;
-  let policyEvaluator: PolicyEvaluatorService;
 
   const testPolicies: PolicyConfig[] = [
     {
@@ -81,14 +79,16 @@ describe('MCP Protocol Flow Tests', () => {
     actionExecutor = new HttpActionExecutor();
     rateLimiter = new RateLimiterService();
     auditService = new JsonlAuditService();
-    policyEvaluator = new PolicyEvaluatorService(testPolicies);
     
     await auditService.initialize();
     
-    // Mock policy provider
+    // Mock policy provider with loaded state
     vi.spyOn(policyProvider, 'getPolicy').mockImplementation((secretId) => {
       return testPolicies.find(p => p.secretId === secretId);
     });
+    
+    // Mark policies as loaded by mocking the private field
+    (policyProvider as any).policiesLoaded = true;
   });
 
   afterEach(() => {
@@ -120,18 +120,20 @@ describe('MCP Protocol Flow Tests', () => {
       });
       
       // Step 3: Use the secret (mock HTTP response)
-      vi.spyOn(actionExecutor, 'executeHttp').mockResolvedValue({
+      vi.spyOn(actionExecutor, 'execute').mockResolvedValue({
         statusCode: 200,
+        statusText: 'OK',
         headers: { 'content-type': 'application/json' },
-        body: { success: true }
+        body: JSON.stringify({ success: true })
       });
       
       const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
       const useResult = await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-        [TEXT.FIELD_ACTION]: 'http_get',
-        [TEXT.FIELD_URL]: 'https://api.example.com/data',
-        [TEXT.FIELD_METHOD]: 'GET'
+        secretId: 'test_api_key',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/data'
+        }
       });
       
       expect(useResult).toHaveProperty('statusCode', 200);
@@ -155,10 +157,11 @@ describe('MCP Protocol Flow Tests', () => {
       
       await expect(async () => {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'https://evil.com/data',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: 'https://evil.com/data'
+          }
         });
       }).rejects.toThrow(ToolError);
       
@@ -190,26 +193,29 @@ describe('MCP Protocol Flow Tests', () => {
     });
 
     it('should handle concurrent use of different secrets', async () => {
-      vi.spyOn(actionExecutor, 'executeHttp').mockResolvedValue({
+      vi.spyOn(actionExecutor, 'execute').mockResolvedValue({
         statusCode: 200,
+        statusText: 'OK',
         headers: {},
-        body: { success: true }
+        body: JSON.stringify({ success: true })
       });
       
       const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
       
       const promises = [
         useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'https://api.example.com/1',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: 'https://api.example.com/1'
+          }
         }),
         useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_db_pass',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'https://db.example.com/2',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_db_pass',
+          action: {
+            type: 'http_get',
+            url: 'https://db.example.com/2'
+          }
         })
       ];
       
@@ -258,10 +264,11 @@ describe('MCP Protocol Flow Tests', () => {
 
   describe('Rate Limiting Scenarios', () => {
     it('should enforce rate limits across requests', async () => {
-      vi.spyOn(actionExecutor, 'executeHttp').mockResolvedValue({
+      vi.spyOn(actionExecutor, 'execute').mockResolvedValue({
         statusCode: 200,
+        statusText: 'OK',
         headers: {},
-        body: { success: true }
+        body: JSON.stringify({ success: true })
       });
       
       const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
@@ -269,10 +276,11 @@ describe('MCP Protocol Flow Tests', () => {
       // Make requests up to the limit (5 requests)
       for (let i = 0; i < 5; i++) {
         const result = await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: `https://api.example.com/request${i}`,
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: `https://api.example.com/request${i}`
+          }
         });
         expect(result).toHaveProperty('statusCode', 200);
       }
@@ -280,10 +288,11 @@ describe('MCP Protocol Flow Tests', () => {
       // 6th request should be rate limited
       await expect(async () => {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'https://api.example.com/request6',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: 'https://api.example.com/request6'
+          }
         });
       }).rejects.toThrow(ToolError);
       
@@ -300,10 +309,11 @@ describe('MCP Protocol Flow Tests', () => {
     });
 
     it('should track rate limits per secret independently', async () => {
-      vi.spyOn(actionExecutor, 'executeHttp').mockResolvedValue({
+      vi.spyOn(actionExecutor, 'execute').mockResolvedValue({
         statusCode: 200,
+        statusText: 'OK',
         headers: {},
-        body: { success: true }
+        body: JSON.stringify({ success: true })
       });
       
       const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
@@ -311,37 +321,41 @@ describe('MCP Protocol Flow Tests', () => {
       // Use test_api_key 3 times (limit is 5)
       for (let i = 0; i < 3; i++) {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: `https://api.example.com/${i}`,
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: `https://api.example.com/${i}`
+          }
         });
       }
       
       // Use test_db_pass 8 times (limit is 10)
       for (let i = 0; i < 8; i++) {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_db_pass',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: `https://db.example.com/${i}`,
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_db_pass',
+          action: {
+            type: 'http_get',
+            url: `https://db.example.com/${i}`
+          }
         });
       }
       
       // Both should still have capacity
       const apiResult = await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-        [TEXT.FIELD_ACTION]: 'http_get',
-        [TEXT.FIELD_URL]: 'https://api.example.com/final',
-        [TEXT.FIELD_METHOD]: 'GET'
+        secretId: 'test_api_key',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/final'
+        }
       });
       expect(apiResult).toHaveProperty('statusCode', 200);
       
       const dbResult = await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_db_pass',
-        [TEXT.FIELD_ACTION]: 'http_get',
-        [TEXT.FIELD_URL]: 'https://db.example.com/final',
-        [TEXT.FIELD_METHOD]: 'GET'
+        secretId: 'test_db_pass',
+        action: {
+          type: 'http_get',
+          url: 'https://db.example.com/final'
+        }
       });
       expect(dbResult).toHaveProperty('statusCode', 200);
     });
@@ -353,10 +367,11 @@ describe('MCP Protocol Flow Tests', () => {
       
       await expect(async () => {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'expired_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'https://api.example.com/data',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'expired_key',
+          action: {
+            type: 'http_get',
+            url: 'https://api.example.com/data'
+          }
         });
       }).rejects.toThrow(ToolError);
       
@@ -387,7 +402,7 @@ describe('MCP Protocol Flow Tests', () => {
     });
 
     it('should handle timeout scenarios', async () => {
-      vi.spyOn(actionExecutor, 'executeHttp').mockRejectedValue(
+      vi.spyOn(actionExecutor, 'execute').mockRejectedValue(
         new ToolError(TEXT.ERROR_TIMEOUT, CONFIG.ERROR_CODE_TIMEOUT)
       );
       
@@ -395,10 +410,11 @@ describe('MCP Protocol Flow Tests', () => {
       
       await expect(async () => {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'https://api.example.com/slow',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: 'https://api.example.com/slow'
+          }
         });
       }).rejects.toThrow(ToolError);
       
@@ -417,28 +433,30 @@ describe('MCP Protocol Flow Tests', () => {
       // Missing required fields
       await expect(async () => {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key'
-          // Missing action and url
+          secretId: 'test_api_key'
+          // Missing action
         });
       }).rejects.toThrow();
       
       // Invalid URL format
       await expect(async () => {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'not-a-url',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: 'not-a-url'
+          }
         });
       }).rejects.toThrow();
       
-      // Invalid action
+      // Invalid action type
       await expect(async () => {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'invalid_action',
-          [TEXT.FIELD_URL]: 'https://api.example.com',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'invalid_action' as any,
+            url: 'https://api.example.com'
+          }
         });
       }).rejects.toThrow();
     });
@@ -446,30 +464,33 @@ describe('MCP Protocol Flow Tests', () => {
 
   describe('Audit Trail Verification', () => {
     it('should record all attempts chronologically', async () => {
-      vi.spyOn(actionExecutor, 'executeHttp').mockResolvedValue({
+      vi.spyOn(actionExecutor, 'execute').mockResolvedValue({
         statusCode: 200,
+        statusText: 'OK',
         headers: {},
-        body: { success: true }
+        body: JSON.stringify({ success: true })
       });
       
       const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
       
       // Make several different attempts
       await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-        [TEXT.FIELD_ACTION]: 'http_get',
-        [TEXT.FIELD_URL]: 'https://api.example.com/1',
-        [TEXT.FIELD_METHOD]: 'GET'
+        secretId: 'test_api_key',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com/1'
+        }
       });
       
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay
       
       try {
         await useSecretTool.execute({
-          [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-          [TEXT.FIELD_ACTION]: 'http_get',
-          [TEXT.FIELD_URL]: 'https://evil.com',
-          [TEXT.FIELD_METHOD]: 'GET'
+          secretId: 'test_api_key',
+          action: {
+            type: 'http_get',
+            url: 'https://evil.com'
+          }
         });
       } catch {
         // Expected to fail
@@ -478,10 +499,11 @@ describe('MCP Protocol Flow Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay
       
       await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_db_pass',
-        [TEXT.FIELD_ACTION]: 'http_get',
-        [TEXT.FIELD_URL]: 'https://db.example.com',
-        [TEXT.FIELD_METHOD]: 'GET'
+        secretId: 'test_db_pass',
+        action: {
+          type: 'http_get',
+          url: 'https://db.example.com'
+        }
       });
       
       // Query all audit entries
@@ -494,7 +516,7 @@ describe('MCP Protocol Flow Tests', () => {
       // Verify chronological order (newest first)
       const timestamps = entries.map(e => new Date(e[TEXT.FIELD_TIMESTAMP]).getTime());
       for (let i = 1; i < timestamps.length; i++) {
-        expect(timestamps[i - 1]).toBeGreaterThanOrEqual(timestamps[i]);
+        expect(timestamps[i - 1]!).toBeGreaterThanOrEqual(timestamps[i]!);
       }
       
       // Verify outcomes
@@ -503,34 +525,38 @@ describe('MCP Protocol Flow Tests', () => {
     });
 
     it('should support filtering audit entries', async () => {
-      vi.spyOn(actionExecutor, 'executeHttp').mockResolvedValue({
+      vi.spyOn(actionExecutor, 'execute').mockResolvedValue({
         statusCode: 200,
+        statusText: 'OK',
         headers: {},
-        body: { success: true }
+        body: JSON.stringify({ success: true })
       });
       
       const useSecretTool = new UseSecretTool(secretProvider, policyProvider, actionExecutor, rateLimiter);
       
       // Make attempts with different secrets
       await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-        [TEXT.FIELD_ACTION]: 'http_get',
-        [TEXT.FIELD_URL]: 'https://api.example.com',
-        [TEXT.FIELD_METHOD]: 'GET'
+        secretId: 'test_api_key',
+        action: {
+          type: 'http_get',
+          url: 'https://api.example.com'
+        }
       });
       
       await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_db_pass',
-        [TEXT.FIELD_ACTION]: 'http_get',
-        [TEXT.FIELD_URL]: 'https://db.example.com',
-        [TEXT.FIELD_METHOD]: 'GET'
+        secretId: 'test_db_pass',
+        action: {
+          type: 'http_get',
+          url: 'https://db.example.com'
+        }
       });
       
       await useSecretTool.execute({
-        [TEXT.FIELD_SECRET_ID]: 'test_api_key',
-        [TEXT.FIELD_ACTION]: 'http_post',
-        [TEXT.FIELD_URL]: 'https://api.example.com',
-        [TEXT.FIELD_METHOD]: 'POST'
+        secretId: 'test_api_key',
+        action: {
+          type: 'http_post',
+          url: 'https://api.example.com'
+        }
       });
       
       // Filter by secret ID

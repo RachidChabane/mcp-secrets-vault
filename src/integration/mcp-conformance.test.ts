@@ -1,15 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { 
   ListToolsRequestSchema, 
   CallToolRequestSchema,
-  CallToolRequest,
-  ListToolsRequest
+  CallToolRequest
 } from '@modelcontextprotocol/sdk/types.js';
 import { TEXT } from '../constants/text-constants.js';
 import { CONFIG } from '../constants/config-constants.js';
-import { McpServerManager } from '../services/mcp-server-manager.js';
 import { DiscoverTool } from '../tools/discover-tool.js';
 import { DescribePolicyTool } from '../tools/describe-policy-tool.js';
 import { UseSecretTool } from '../tools/use-secret-tool.js';
@@ -99,7 +96,7 @@ describe('MCP Protocol Conformance', () => {
     it('should handle version compatibility', () => {
       const compatibleVersions = ['1.0.0', '1.0.1', '1.1.0'];
       compatibleVersions.forEach(version => {
-        const testServer = new Server(
+        new Server(
           { name: 'test', version },
           { capabilities: { tools: {} } }
         );
@@ -249,7 +246,7 @@ describe('MCP Protocol Conformance', () => {
       } as CallToolRequest);
       
       expect(response.isError).toBeUndefined();
-      const result = JSON.parse(response.content[0].text);
+      const result = JSON.parse(response.content[0]!.text);
       expect(result).toHaveProperty(TEXT.FIELD_SECRETS);
       expect(Array.isArray(result[TEXT.FIELD_SECRETS])).toBe(true);
     });
@@ -288,7 +285,7 @@ describe('MCP Protocol Conformance', () => {
       } as CallToolRequest);
       
       expect(response.isError).toBe(true);
-      const error = JSON.parse(response.content[0].text);
+      const error = JSON.parse(response.content[0]!.text);
       expect(error[TEXT.FIELD_ERROR]).toBeDefined();
       expect(error[TEXT.FIELD_ERROR][TEXT.FIELD_CODE]).toBeDefined();
     });
@@ -322,7 +319,7 @@ describe('MCP Protocol Conformance', () => {
       } as CallToolRequest);
       
       expect(response.isError).toBe(true);
-      const error = JSON.parse(response.content[0].text);
+      const error = JSON.parse(response.content[0]!.text);
       expect(error[TEXT.FIELD_ERROR][TEXT.FIELD_CODE]).toBe(CONFIG.ERROR_CODE_UNKNOWN_TOOL);
       expect(error[TEXT.FIELD_ERROR][TEXT.FIELD_MESSAGE]).toBe(TEXT.ERROR_UNKNOWN_TOOL);
     });
@@ -389,7 +386,7 @@ describe('MCP Protocol Conformance', () => {
       } as CallToolRequest);
       
       // Discover tool should handle null as empty object
-      const result = JSON.parse(response.content[0].text);
+      const result = JSON.parse(response.content[0]!.text);
       expect(result).toHaveProperty(TEXT.FIELD_SECRETS);
     });
   });
@@ -465,7 +462,7 @@ describe('MCP Protocol Conformance', () => {
       } as CallToolRequest);
       
       expect(response.isError).toBe(true);
-      const error = JSON.parse(response.content[0].text);
+      const error = JSON.parse(response.content[0]!.text);
       expect(error[TEXT.FIELD_ERROR][TEXT.FIELD_CODE]).toBe(CONFIG.ERROR_CODE_RATE_LIMITED);
       expect(error[TEXT.FIELD_ERROR][TEXT.FIELD_MESSAGE]).toBe(TEXT.ERROR_RATE_LIMITED);
     });
@@ -492,7 +489,7 @@ describe('MCP Protocol Conformance', () => {
         execute: async () => {
           throw new ToolError(
             TEXT.ERROR_NETWORK_ERROR,
-            CONFIG.ERROR_CODE_NETWORK_ERROR
+            'network_error'
           );
         }
       };
@@ -547,8 +544,8 @@ describe('MCP Protocol Conformance', () => {
       
       const response = await handler();
       
-      expect(response.content[0].type).toBe('text');
-      expect(typeof response.content[0].text).toBe('string');
+      expect(response.content[0]!.type).toBe('text');
+      expect(typeof response.content[0]!.text).toBe('string');
     });
 
     it('should handle large payloads', async () => {

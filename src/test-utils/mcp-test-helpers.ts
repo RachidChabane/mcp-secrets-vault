@@ -148,13 +148,18 @@ export function createTestResponse(
   content: any,
   isError: boolean = false
 ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
-  return {
+  const response: { content: Array<{ type: string; text: string }>; isError?: boolean } = {
     content: [{
       type: 'text',
       text: typeof content === 'string' ? content : JSON.stringify(content, null, 2)
-    }],
-    ...(isError && { isError: true })
+    }]
   };
+  
+  if (isError) {
+    response.isError = true;
+  }
+  
+  return response;
 }
 
 /**
@@ -164,12 +169,14 @@ export function createErrorResponse(
   code: string,
   message: string
 ): { content: Array<{ type: string; text: string }>; isError: boolean } {
-  return createTestResponse({
+  const response = createTestResponse({
     [TEXT.FIELD_ERROR]: {
       [TEXT.FIELD_CODE]: code,
       [TEXT.FIELD_MESSAGE]: message
     }
   }, true);
+  
+  return response as { content: Array<{ type: string; text: string }>; isError: boolean };
 }
 
 /**
