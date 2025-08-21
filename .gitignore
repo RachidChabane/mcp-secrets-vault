@@ -61,6 +61,13 @@ audit/
 logs/
 *.jsonl
 
+# Test and demo files
+test-audit/
+test-env.sh
+test-mcp.js
+!test-vault.config.json
+!test-runner.sh
+
 # OS
 Thumbs.db
 Desktop.ini
