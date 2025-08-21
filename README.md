@@ -383,6 +383,14 @@ MIT License - see [LICENSE](./LICENSE) file for details.
 - [MCP Protocol Documentation](https://modelcontextprotocol.io)
 - [Issue Tracker](https://github.com/RachidChabane/mcp-secrets-vault/issues)
 
+## 🔭 Roadmap (post-MVP, non-binding)
+
+- **Init wizard + templates**: scaffold a minimal `vault.config.json`.
+- **Dry-run mode**: simulate requests and show effective headers (secrets masked).
+- **CLI audit viewer**: list/filter/export JSONL by date/id/FQDN with simple pagination.
+- **Refined rate limits**: per-FQDN and per-secret; deterministic retry/backoff.
+- **Consent gate & response guards**: first-use confirmation per domain; max body size & per-domain timeouts.
+
 ## ⚠️ Disclaimer
 
 This tool is designed for development and controlled environments. Always follow your organization's security policies when handling sensitive credentials.

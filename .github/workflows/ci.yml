@@ -12,6 +12,7 @@ on:
   pull_request:
     branches:
       - develop
+      - main
 
 # Cancel stale runs on the same ref
 concurrency:
