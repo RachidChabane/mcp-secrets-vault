@@ -30,10 +30,32 @@
     "vault",
     "security",
     "ai",
-    "assistant"
+    "assistant",
+    "model-context-protocol",
+    "secret-management",
+    "api-keys",
+    "environment-variables"
   ],
-  "author": "",
+  "author": "MCP Secrets Vault Contributors",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcp-secrets-vault/mcp-secrets-vault.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mcp-secrets-vault/mcp-secrets-vault/issues"
+  },
+  "homepage": "https://github.com/mcp-secrets-vault/mcp-secrets-vault#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "zod": "^3.24.1"

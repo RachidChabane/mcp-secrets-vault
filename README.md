@@ -16,12 +16,38 @@ A secure Model Context Protocol (MCP) server that enables AI assistants to use s
 
 ### Installation
 
+#### Option 1: Global Installation
 ```bash
-# Install globally
 npm install -g mcp-secrets-vault
+mcp-secrets-vault doctor  # Verify installation
+```
 
-# Or use directly with npx
-npx mcp-secrets-vault
+#### Option 2: Direct Usage with npx (Recommended)
+```bash
+npx mcp-secrets-vault doctor  # Test without installing
+```
+
+#### Option 3: Local Installation in Project
+```bash
+npm install mcp-secrets-vault
+```
+
+### MCP Client Configuration
+
+For use with Claude Desktop or other MCP clients:
+
+```json
+{
+  "mcpServers": {
+    "secrets-vault": {
+      "command": "npx",
+      "args": ["mcp-secrets-vault"],
+      "env": {
+        "VAULT_CONFIG": "./vault.config.json"
+      }
+    }
+  }
+}
 ```
 
 ### Basic Setup
@@ -67,21 +93,6 @@ export OPENAI_API_KEY="sk-fake789example012key"
       }
     }
   ]
-}
-```
-
-3. **Configure your MCP client** (e.g., Claude Desktop):
-```json
-{
-  "mcpServers": {
-    "secrets-vault": {
-      "command": "npx",
-      "args": ["mcp-secrets-vault"],
-      "env": {
-        "VAULT_CONFIG": "./vault.config.json"
-      }
-    }
-  }
 }
 ```
 

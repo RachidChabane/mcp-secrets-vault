@@ -11,9 +11,6 @@ export default defineConfig({
   target: 'node20',
   outDir: 'dist',
   shims: false,
-  banner: {
-    js: '#!/usr/bin/env node'
-  },
   esbuildOptions(options) {
     options.platform = 'node';
   }
