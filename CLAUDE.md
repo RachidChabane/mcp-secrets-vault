@@ -17,7 +17,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Code Quality
 - **Type checking**: `npm run typecheck` or `npm run lint` - Both run TypeScript compiler checks
-- **Function length check**: `node check_function_length.js` - Validate 20-line function limit
 - **Config validation**: `npm run validate:config` - Validate configuration files
 - **Schema generation**: `npm run generate:schema` - Generate JSON schema from TypeScript types
 - **Before committing**: Always run `npm run typecheck` to ensure no type errors
@@ -84,7 +83,6 @@ This is an MCP (Model Context Protocol) server for secure secret management with
 
 ### Code Quality Standards
 
-- **Function Length**: Maximum 20 lines (enforced by check_function_length.js)
 - **Test Coverage**: 95%+ achieved (80% threshold required)
 - **Constant Centralization**: All strings and configuration in constants/
 - **Table-Driven Design**: Eliminates type-based branching in favor of lookup tables
