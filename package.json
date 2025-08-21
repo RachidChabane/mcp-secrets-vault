@@ -36,16 +36,16 @@
     "api-keys",
     "environment-variables"
   ],
-  "author": "MCP Secrets Vault Contributors",
+  "author": "Rachid Chabane",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mcp-secrets-vault/mcp-secrets-vault.git"
+    "url": "git+https://github.com/RachidChabane/mcp-secrets-vault.git"
   },
   "bugs": {
-    "url": "https://github.com/mcp-secrets-vault/mcp-secrets-vault/issues"
+    "url": "https://github.com/RachidChabane/mcp-secrets-vault/issues"
   },
-  "homepage": "https://github.com/mcp-secrets-vault/mcp-secrets-vault#readme",
+  "homepage": "https://github.com/RachidChabane/mcp-secrets-vault#readme",
   "files": [
     "dist",
     "README.md",
