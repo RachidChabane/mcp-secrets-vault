@@ -1,0 +1,19 @@
+name: 'Build Project'
+description: 'Build TypeScript project with tsup'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run TypeScript type check
+      shell: bash
+      run: |
+        echo "Running TypeScript type check..."
+        npm run typecheck
+        echo "Type check completed"
+    
+    - name: Build project
+      shell: bash
+      run: |
+        echo "Building project..."
+        npm run build
+        echo "Build completed successfully"

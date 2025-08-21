@@ -1,0 +1,12 @@
+name: 'Install Dependencies'
+description: 'Install npm dependencies with clean install'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        echo "Installing dependencies..."
+        npm ci --no-audit --no-fund
+        echo "Dependencies installed successfully"

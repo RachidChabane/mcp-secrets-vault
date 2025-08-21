@@ -331,6 +331,17 @@ npx vitest run src/services/rate-limiter.test.ts
 npm run typecheck
 ```
 
+### CI/CD
+
+This project uses GitHub Actions for continuous integration. The CI pipeline:
+
+- **Triggers**: Runs on push to `develop`, `main`, and feature branches (`feat/**`, `fix/**`, `hotfix/**`, `release/**`), and on pull requests targeting `develop`
+- **Coverage Requirement**: Enforces ≥80% test coverage threshold - builds will fail if coverage drops below this level
+- **Build Artifacts**: Coverage reports are uploaded and retained for 7 days
+- **Branch Protection**: The `build-and-test` check must pass before merging to `develop` or `main`
+
+The CI workflow ensures code quality and test coverage standards are maintained across all contributions.
+
 ## 🤝 Contributing
 
 We welcome contributions! Please follow these guidelines:

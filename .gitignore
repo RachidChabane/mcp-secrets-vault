@@ -14,7 +14,7 @@ lerna-debug.log*
 # TypeScript
 *.tsbuildinfo
 dist/
-build/
+/build/
 out/
 *.js
 *.js.map
@@ -67,7 +67,6 @@ Desktop.ini
 
 # Package files
 *.tgz
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
