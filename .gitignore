@@ -1,5 +1,6 @@
 # Claude context files
 .claude/
+claude.md
 
 # Node.js
 node_modules/
