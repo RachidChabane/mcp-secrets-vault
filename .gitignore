@@ -14,7 +14,7 @@ lerna-debug.log*
 # TypeScript
 *.tsbuildinfo
 dist/
-build/
+/build/
 out/
 *.js
 *.js.map

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - 'feat/**'
+      - 'fix/**'
+      - 'hotfix/**'
+      - 'release/**'
+  pull_request:
+    branches:
+      - develop
+
+# Cancel stale runs on the same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+# Minimal permissions
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        uses: ./.github/actions/install-deps
+      
+      - name: Build project
+        uses: ./.github/actions/build
+      
+      - name: Run tests with coverage
+        uses: ./.github/actions/test-coverage
+        id: test-coverage
+      
+      - name: Upload coverage artifact
+        uses: ./.github/actions/upload-artifact
+        with:
+          name: coverage-report-${{ github.sha }}
+          retention-days: 7

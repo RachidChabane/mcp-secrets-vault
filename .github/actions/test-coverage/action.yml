@@ -1,0 +1,40 @@
+name: 'Test with Coverage'
+description: 'Run tests and check coverage threshold'
+outputs:
+  coverage-passed:
+    description: 'Whether coverage threshold was met'
+    value: ${{ steps.coverage-check.outputs.passed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run tests with coverage
+      shell: bash
+      run: |
+        echo "Running tests with coverage..."
+        npm run test:coverage
+        echo "Tests completed"
+    
+    - name: Check coverage threshold
+      id: coverage-check
+      shell: bash
+      run: |
+        # Extract coverage percentage from the output
+        COVERAGE_FILE="coverage/coverage-summary.json"
+        if [ -f "$COVERAGE_FILE" ]; then
+          TOTAL_COVERAGE=$(node -e "const coverage = require('./$COVERAGE_FILE'); console.log(Math.floor(coverage.total.lines.pct));")
+          echo "Total coverage: ${TOTAL_COVERAGE}%"
+          
+          if [ "$TOTAL_COVERAGE" -lt 80 ]; then
+            echo "Coverage ${TOTAL_COVERAGE}% is below required 80% threshold"
+            echo "passed=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "Coverage ${TOTAL_COVERAGE}% meets required 80% threshold"
+            echo "passed=true" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "Coverage report not found"
+          echo "passed=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
