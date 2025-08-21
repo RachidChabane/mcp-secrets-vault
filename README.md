@@ -1,3 +1,5 @@
+[![CI](https://github.com/RachidChabane/mcp-secrets-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/RachidChabane/mcp-secrets-vault/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/RachidChabane/mcp-secrets-vault/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/RachidChabane/mcp-secrets-vault) [![npm version](https://img.shields.io/npm/v/mcp-secrets-vault)](https://www.npmjs.com/package/mcp-secrets-vault) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 # MCP Secrets Vault
 
 A secure Model Context Protocol (MCP) server that enables AI assistants to use secrets (API keys, tokens) without ever exposing them. Built with TypeScript, featuring policy-based access control, rate limiting, and comprehensive audit logging.
@@ -16,12 +18,38 @@ A secure Model Context Protocol (MCP) server that enables AI assistants to use s
 
 ### Installation
 
+#### Option 1: Global Installation
 ```bash
-# Install globally
 npm install -g mcp-secrets-vault
+mcp-secrets-vault doctor  # Verify installation
+```
 
-# Or use directly with npx
-npx mcp-secrets-vault
+#### Option 2: Direct Usage with npx (Recommended)
+```bash
+npx mcp-secrets-vault doctor  # Test without installing
+```
+
+#### Option 3: Local Installation in Project
+```bash
+npm install mcp-secrets-vault
+```
+
+### MCP Client Configuration
+
+For use with Claude Desktop or other MCP clients:
+
+```json
+{
+  "mcpServers": {
+    "secrets-vault": {
+      "command": "npx",
+      "args": ["mcp-secrets-vault"],
+      "env": {
+        "VAULT_CONFIG": "./vault.config.json"
+      }
+    }
+  }
+}
 ```
 
 ### Basic Setup
@@ -67,21 +95,6 @@ export OPENAI_API_KEY="sk-fake789example012key"
       }
     }
   ]
-}
-```
-
-3. **Configure your MCP client** (e.g., Claude Desktop):
-```json
-{
-  "mcpServers": {
-    "secrets-vault": {
-      "command": "npx",
-      "args": ["mcp-secrets-vault"],
-      "env": {
-        "VAULT_CONFIG": "./vault.config.json"
-      }
-    }
-  }
 }
 ```
 
@@ -369,6 +382,14 @@ MIT License - see [LICENSE](./LICENSE) file for details.
 - [GitHub Repository](https://github.com/RachidChabane/mcp-secrets-vault)
 - [MCP Protocol Documentation](https://modelcontextprotocol.io)
 - [Issue Tracker](https://github.com/RachidChabane/mcp-secrets-vault/issues)
+
+## 🔭 Roadmap (post-MVP, non-binding)
+
+- **Init wizard + templates**: scaffold a minimal `vault.config.json`.
+- **Dry-run mode**: simulate requests and show effective headers (secrets masked).
+- **CLI audit viewer**: list/filter/export JSONL by date/id/FQDN with simple pagination.
+- **Refined rate limits**: per-FQDN and per-secret; deterministic retry/backoff.
+- **Consent gate & response guards**: first-use confirmation per domain; max body size & per-domain timeouts.
 
 ## ⚠️ Disclaimer
 

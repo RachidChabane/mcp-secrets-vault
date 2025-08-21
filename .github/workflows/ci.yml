@@ -12,6 +12,7 @@ on:
   pull_request:
     branches:
       - develop
+      - main
 
 # Cancel stale runs on the same ref
 concurrency:
@@ -45,6 +46,15 @@ jobs:
       - name: Run tests with coverage
         uses: ./.github/actions/test-coverage
         id: test-coverage
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
       
       - name: Upload coverage artifact
         uses: ./.github/actions/upload-artifact
