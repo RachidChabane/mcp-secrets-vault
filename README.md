@@ -4,6 +4,10 @@
 
 A secure Model Context Protocol (MCP) server that enables AI assistants to use secrets (API keys, tokens) without ever exposing them. Built with TypeScript, featuring policy-based access control, rate limiting, and comprehensive audit logging.
 
+![MCP Secrets Vault Demo](./docs/assets/demo.gif)
+
+[📺 View Full Demo Guide](./DEMO.md)
+
 ## 🔒 Security First
 
 **Key Security Guarantee**: AI assistants can use your secrets to perform actions but will NEVER see the actual secret values.

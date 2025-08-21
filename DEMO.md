@@ -1,5 +1,9 @@
 # MCP Secrets Vault - Demo Guide
 
+## Example Usage with Claude Code
+
+![MCP Secrets Vault Demo](./docs/assets/demo.gif)
+
 ## 🎯 Overview
 
 This demo shows how to set up and use MCP Secrets Vault to securely manage API keys and tokens for AI assistants.
