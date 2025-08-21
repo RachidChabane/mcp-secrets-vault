@@ -14,4 +14,3 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
         cache: 'npm'
-        cache-dependency-path: 'package-lock.json'
