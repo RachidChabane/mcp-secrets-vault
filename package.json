@@ -1,6 +1,6 @@
 {
   "name": "mcp-secrets-vault",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP-compatible tool for secure secret management without exposure",
   "type": "module",
   "main": "dist/index.js",
