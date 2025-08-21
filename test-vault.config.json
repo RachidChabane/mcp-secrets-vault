@@ -1,0 +1,58 @@
+{
+  "version": "1.0.0",
+  "mappings": [
+    {
+      "secretId": "github_token",
+      "envVar": "GITHUB_TOKEN",
+      "description": "GitHub Personal Access Token"
+    },
+    {
+      "secretId": "openai_key",
+      "envVar": "OPENAI_API_KEY",
+      "description": "OpenAI API Key"
+    },
+    {
+      "secretId": "slack_token",
+      "envVar": "SLACK_BOT_TOKEN",
+      "description": "Slack Bot Token"
+    }
+  ],
+  "policies": [
+    {
+      "secretId": "github_token",
+      "allowedActions": ["http_get", "http_post"],
+      "allowedDomains": ["api.github.com"],
+      "rateLimit": {
+        "requests": 100,
+        "windowSeconds": 3600
+      }
+    },
+    {
+      "secretId": "openai_key",
+      "allowedActions": ["http_post"],
+      "allowedDomains": ["api.openai.com"],
+      "rateLimit": {
+        "requests": 50,
+        "windowSeconds": 3600
+      }
+    },
+    {
+      "secretId": "slack_token",
+      "allowedActions": ["http_post"],
+      "allowedDomains": ["slack.com", "api.slack.com"],
+      "rateLimit": {
+        "requests": 60,
+        "windowSeconds": 60
+      }
+    }
+  ],
+  "settings": {
+    "auditDir": "./test-audit",
+    "maxFileSizeMb": 10,
+    "maxFileAgeDays": 30,
+    "defaultRateLimit": {
+      "requests": 10,
+      "windowSeconds": 60
+    }
+  }
+}
