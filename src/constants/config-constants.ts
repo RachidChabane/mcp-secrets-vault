@@ -1,16 +1,18 @@
+import { PACKAGE_VERSION, PACKAGE_NAME } from '../utils/package-info.js';
+
 export const CONFIG = {
   // Version
-  VERSION: '0.1.0',
+  VERSION: PACKAGE_VERSION,
   
   // Server settings
-  SERVER_NAME: 'mcp-secrets-vault',
-  SERVER_VERSION: '0.1.0',
+  SERVER_NAME: PACKAGE_NAME,
+  SERVER_VERSION: PACKAGE_VERSION,
   PROTOCOL_VERSION: '1.0.0',
   
   // HTTP settings
   HTTP_TIMEOUT_MS: 30000,
   HTTP_MAX_REDIRECTS: 5,
-  HTTP_DEFAULT_USER_AGENT: 'MCP-Secrets-Vault/0.1.0',
+  HTTP_DEFAULT_USER_AGENT: `MCP-Secrets-Vault/${PACKAGE_VERSION}`,
   
   // Rate limiting
   DEFAULT_RATE_LIMIT_REQUESTS: 100,
@@ -72,6 +74,7 @@ export const CONFIG = {
   
   // File paths
   DEFAULT_CONFIG_FILE: 'vault.config.json',
+  ENV_VAULT_CONFIG: 'VAULT_CONFIG',
   DEFAULT_POLICIES_DIR: 'policies',
   DEFAULT_POLICIES_FILE: 'policies.json',
   DEFAULT_MAPPINGS_FILE: 'mappings.json',
@@ -189,6 +192,8 @@ export const CONFIG = {
   
   // URL schemes
   FILE_URL_SCHEME: 'file://',
+  INDEX_JS_SUFFIX: '/index.js',
+  CLI_DOCTOR_MODULE: './cli/doctor.js',
   
   // Logging patterns
   STACK_TRACE_PATTERN: '\n    at ',

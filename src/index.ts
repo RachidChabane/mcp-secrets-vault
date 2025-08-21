@@ -18,7 +18,12 @@ import { writeError, writeInfo } from './utils/logging.js';
 
 
 async function loadConfiguration() {
-  const configLoader = new ConfigLoaderService();
+  // Support config path from environment variable or command line argument
+  const configPath = process.env[CONFIG.ENV_VAULT_CONFIG] || 
+                    process.argv[2] || 
+                    CONFIG.DEFAULT_CONFIG_FILE;
+  
+  const configLoader = new ConfigLoaderService(configPath);
   
   try {
     const config = await configLoader.loadConfig();
@@ -101,8 +106,8 @@ async function main(): Promise<void> {
 }
 
 // Check if this module is being run directly (works with compiled code)
-const isMainModule = process.argv[1]?.endsWith('/index.js') || 
-                     process.argv[1]?.endsWith('mcp-secrets-vault') ||
+const isMainModule = process.argv[1]?.endsWith(CONFIG.INDEX_JS_SUFFIX) || 
+                     process.argv[1]?.endsWith(CONFIG.SERVER_NAME) ||
                      import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`;
 
 if (isMainModule) {
@@ -110,7 +115,7 @@ if (isMainModule) {
   const args = process.argv.slice(2);
   if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
     // Import and run doctor CLI
-    import('./cli/doctor.js').then(({ DoctorCLI }) => {
+    import(CONFIG.CLI_DOCTOR_MODULE).then(({ DoctorCLI }) => {
       const doctor = new DoctorCLI(args[1]);
       return doctor.run();
     }).catch(() => {

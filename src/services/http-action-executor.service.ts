@@ -115,7 +115,7 @@ export class HttpActionExecutor implements IActionExecutor {
     };
     
     if (request.injectionType === 'bearer') {
-      headers[CONFIG.HEADER_AUTHORIZATION] = `Bearer ${request.secretValue}`;
+      headers[TEXT.AUTHORIZATION_HEADER] = `Bearer ${request.secretValue}`;
     } else if (request.injectionType === 'header' && request.headerName) {
       headers[request.headerName.toLowerCase()] = request.secretValue;
     }

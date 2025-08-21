@@ -47,7 +47,7 @@ describe('HttpActionExecutor', () => {
           expect.objectContaining({
             method: 'GET',
             headers: expect.objectContaining({
-              [CONFIG.HEADER_AUTHORIZATION]: 'Bearer secret123',
+              [TEXT.AUTHORIZATION_HEADER]: 'Bearer secret123',
               [CONFIG.HEADER_USER_AGENT]: CONFIG.HTTP_DEFAULT_USER_AGENT
             }),
             redirect: CONFIG.FETCH_REDIRECT_MODE
@@ -122,7 +122,7 @@ describe('HttpActionExecutor', () => {
             method: 'POST',
             body: JSON.stringify({ name: 'test', value: 123 }),
             headers: expect.objectContaining({
-              [CONFIG.HEADER_AUTHORIZATION]: 'Bearer secret456',
+              [TEXT.AUTHORIZATION_HEADER]: 'Bearer secret456',
               [CONFIG.HEADER_CONTENT_TYPE]: 'application/json',
               [CONFIG.HEADER_USER_AGENT]: CONFIG.HTTP_DEFAULT_USER_AGENT
             }),

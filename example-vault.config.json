@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "mappings": [
+    {
+      "secretId": "github_readonly",
+      "envVar": "REAL_GITHUB_TOKEN",
+      "description": "GitHub token for public repo access only"
+    }
+  ],
+  "policies": [
+    {
+      "secretId": "github_readonly",
+      "allowedActions": ["http_get"],
+      "allowedDomains": ["api.github.com"],
+      "rateLimit": {
+        "requests": 60,
+        "windowSeconds": 3600
+      }
+    }
+  ],
+  "settings": {
+    "auditDir": "./real-audit"
+  }
+}

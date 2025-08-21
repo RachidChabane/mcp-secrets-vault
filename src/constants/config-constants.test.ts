@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { CONFIG } from './config-constants.js';
+import { PACKAGE_VERSION } from '../utils/package-info.js';
 
 describe('Config Constants', () => {
   it('should have version defined', () => {
-    expect(CONFIG.VERSION).toBe('0.1.0');
-    expect(CONFIG.SERVER_VERSION).toBe('0.1.0');
+    expect(CONFIG.VERSION).toBe(PACKAGE_VERSION);
+    expect(CONFIG.SERVER_VERSION).toBe(PACKAGE_VERSION);
   });
 
   it('should have HTTP settings defined', () => {
