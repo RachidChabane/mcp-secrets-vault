@@ -1,4 +1,4 @@
-[![CI](https://github.com/RachidChabane/mcp-secrets-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/RachidChabane/mcp-secrets-vault/actions/workflows/ci.yml) [![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)](https://github.com/RachidChabane/mcp-secrets-vault) [![npm version](https://img.shields.io/npm/v/mcp-secrets-vault)](https://www.npmjs.com/package/mcp-secrets-vault) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/RachidChabane/mcp-secrets-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/RachidChabane/mcp-secrets-vault/actions/workflows/ci.yml) [![codecov](https://codecov.io/gh/RachidChabane/mcp-secrets-vault/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/RachidChabane/mcp-secrets-vault) [![npm version](https://img.shields.io/npm/v/mcp-secrets-vault)](https://www.npmjs.com/package/mcp-secrets-vault) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # MCP Secrets Vault
 
