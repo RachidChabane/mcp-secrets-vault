@@ -100,7 +100,12 @@ async function main(): Promise<void> {
   }
 }
 
-if (import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`) {
+// Check if this module is being run directly (works with compiled code)
+const isMainModule = process.argv[1]?.endsWith('/index.js') || 
+                     process.argv[1]?.endsWith('mcp-secrets-vault') ||
+                     import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`;
+
+if (isMainModule) {
   // Check if running doctor command
   const args = process.argv.slice(2);
   if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
