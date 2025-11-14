@@ -5,6 +5,7 @@ import { TEXT } from '../constants/text-constants.js';
 import { ToolError } from '../utils/errors.js';
 import { SecretMapping } from '../interfaces/secret-mapping.interface.js';
 import { PolicyConfig } from '../interfaces/policy.interface.js';
+import { EnvFileLoaderService } from './env-file-loader.service.js';
 
 export interface ConfigLoader {
   loadConfig(): Promise<FrozenVaultConfig>;
@@ -13,10 +14,14 @@ export interface ConfigLoader {
 
 export class ConfigLoaderService implements ConfigLoader {
   private cachedConfig: FrozenVaultConfig | null = null;
-  
+  private envFileLoader: EnvFileLoaderService;
+
   constructor(
-    private readonly configPath: string = CONFIG.DEFAULT_CONFIG_FILE
-  ) {}
+    private readonly configPath: string = CONFIG.DEFAULT_CONFIG_FILE,
+    private readonly loadEnvFiles: boolean = true
+  ) {
+    this.envFileLoader = new EnvFileLoaderService();
+  }
 
   getConfigPath(): string {
     return this.configPath;
@@ -28,13 +33,18 @@ export class ConfigLoaderService implements ConfigLoader {
       return this.cachedConfig;
     }
 
+    // Load .env files first (if enabled) to populate environment variables
+    if (this.loadEnvFiles) {
+      await this.envFileLoader.loadEnvironmentFiles();
+    }
+
     try {
       const content = await fs.readFile(this.configPath, CONFIG.DEFAULT_ENCODING);
       const data: unknown = JSON.parse(content);
-      
+
       // Validate and parse config with schema
       const config = validateVaultConfig(data);
-      
+
       // Freeze the config for immutability
       this.cachedConfig = this.freezeConfig(config);
       return this.cachedConfig;

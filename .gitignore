@@ -37,12 +37,19 @@ coverage/
 *~
 .DS_Store
 
-# Environment
+# Environment files - NEVER commit these!
+# Issue #24: Environment-specific .env files support
 .env
+.env.*
 .env.local
+.env.*.local
+.env.development
 .env.development.local
-.env.test.local
+.env.staging
+.env.staging.local
+.env.production
 .env.production.local
+.env.test.local
 
 # Secrets (extra safety)
 *secret*

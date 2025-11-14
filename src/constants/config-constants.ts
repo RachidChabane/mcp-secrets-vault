@@ -194,6 +194,7 @@ export const CONFIG = {
   FILE_URL_SCHEME: 'file://',
   INDEX_JS_SUFFIX: '/index.js',
   CLI_DOCTOR_MODULE: './cli/doctor.js',
+  CLI_INIT_MODULE: './cli/init.js',
   
   // Logging patterns
   STACK_TRACE_PATTERN: '\n    at ',
@@ -258,7 +259,24 @@ export const CONFIG = {
     'client_secret', 'webhook_secret', 'signing_key', 'encryption_key',
     'database_url', 'connection_string', 'env', 'envvar', 'environment'
   ] as const,
-  
+
+  // Environment variables
+  ENV_NODE_ENV: 'NODE_ENV',
+  ENV_MCP_ENV: 'MCP_ENV',
+
+  // .env file loading
+  ENV_FILE_BASE: '.env',
+  ENV_FILE_LOCAL: '.env.local',
+  ENV_FILE_COMMENT_PREFIX: '#',
+  ENV_FILE_LINE_REGEX: /^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/,
+  ENV_FILE_QUOTE_REGEX: /^(["'])(.*)\1$/,
+
+  // Auto-discovery
+  DISCOVER_ENV_MAX_SECRETS: 100,
+  DISCOVER_ENV_PATTERN_WILDCARD: '*',
+  INIT_COMMAND_FLAG: '--init',
+  DISCOVER_ENV_FLAG: '--discover-env',
+
   // Doctor CLI thresholds
   DOCTOR_RATE_LIMIT_MIN_REQUESTS: 10,
   DOCTOR_RATE_LIMIT_MAX_REQUESTS: 10000,

@@ -102,6 +102,64 @@ export OPENAI_API_KEY="sk-fake789example012key"
 }
 ```
 
+### Quick Start with Auto-Discovery
+
+**NEW**: Quickly initialize your configuration by auto-discovering secrets from environment variables!
+
+1. **Set your environment variables**:
+```bash
+export GITHUB_TOKEN="ghp_example123"
+export OPENAI_API_KEY="sk-example456"
+export STRIPE_SECRET_KEY="sk_test_example789"
+```
+
+2. **Auto-generate configuration**:
+```bash
+npx mcp-secrets-vault --init --discover-env "GITHUB_*,OPENAI_*,STRIPE_*"
+```
+
+This will create a `vault.config.json` with discovered secrets. You'll still need to add allowed domains to the policies before use.
+
+3. **Review and edit** the generated `vault.config.json`:
+   - Add allowed domains for each secret
+   - Adjust rate limits as needed
+   - Remove any secrets you don't want to expose
+
+4. **Verify your setup**:
+```bash
+npx mcp-secrets-vault doctor
+```
+
+### Environment-Specific .env Files
+
+**NEW**: Support for environment-specific .env files (like Vite/Create React App)!
+
+The server automatically loads .env files in this precedence order:
+1. `.env.{environment}.local` (highest priority, gitignored)
+2. `.env.{environment}` (e.g., `.env.development`)
+3. `.env.local` (gitignored)
+4. `.env` (lowest priority)
+
+Where `{environment}` is determined by `NODE_ENV` or `MCP_ENV`.
+
+**Example setup:**
+
+```bash
+# .env.development
+GITHUB_TOKEN=ghp_dev_token_12345
+OPENAI_API_KEY=sk-dev-key-67890
+
+# .env.production
+GITHUB_TOKEN=ghp_prod_token_real
+OPENAI_API_KEY=sk-prod-key-real
+```
+
+**Security Notes:**
+- ⚠️ **ALL .env files should be gitignored** - they contain secrets!
+- `.env.*.local` files are for local overrides only
+- Existing environment variables take precedence over .env files
+- The vault.config.json still controls policies (env files only provide values)
+
 ## 📖 Architecture
 
 ### System Overview

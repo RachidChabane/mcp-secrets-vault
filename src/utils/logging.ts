@@ -105,7 +105,7 @@ export function writeError(message: string, context: LogContext = {}): void {
 
 export function writeInfo(message: string, context: LogContext = {}): void {
   const { level = CONFIG.LOG_LEVEL_INFO, ...rest } = context;
-  
+
   const redactedRest = redactValue(rest);
   const logEntry = {
     timestamp: new Date().toISOString(),
@@ -113,7 +113,28 @@ export function writeInfo(message: string, context: LogContext = {}): void {
     message: redactValue(message),
     ...(typeof redactedRest === 'object' && redactedRest !== null ? redactedRest : {})
   };
-  
+
   // Write to stdout as structured JSON for info logs
+  console.log(JSON.stringify(logEntry));
+}
+
+export function writeDebug(message: string, context: LogContext = {}): void {
+  const { level = CONFIG.LOG_LEVEL_DEBUG, ...rest } = context;
+
+  // Only log debug messages if debug level is enabled
+  const envLogLevel = process.env.VAULT_LOG_LEVEL || CONFIG.DEFAULT_LOG_LEVEL;
+  if (envLogLevel !== CONFIG.LOG_LEVEL_DEBUG) {
+    return;
+  }
+
+  const redactedRest = redactValue(rest);
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    level,
+    message: redactValue(message),
+    ...(typeof redactedRest === 'object' && redactedRest !== null ? redactedRest : {})
+  };
+
+  // Write to stdout as structured JSON for debug logs
   console.log(JSON.stringify(logEntry));
 }

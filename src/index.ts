@@ -111,9 +111,34 @@ const isMainModule = process.argv[1]?.endsWith(CONFIG.INDEX_JS_SUFFIX) ||
                      import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`;
 
 if (isMainModule) {
-  // Check if running doctor command
+  // Check if running doctor command or init command
   const args = process.argv.slice(2);
-  if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
+
+  // Check for --init flag
+  if (args.includes(CONFIG.INIT_COMMAND_FLAG)) {
+    // Import and run init CLI
+    import(CONFIG.CLI_INIT_MODULE).then(({ InitCLI }) => {
+      // Extract discovery patterns
+      const discoverEnvIndex = args.indexOf(CONFIG.DISCOVER_ENV_FLAG);
+      const patterns: string[] = [];
+
+      if (discoverEnvIndex !== -1) {
+        const patternsArg = args[discoverEnvIndex + 1];
+        if (patternsArg) {
+          patterns.push(...patternsArg.split(',').map(p => p.trim()));
+        }
+      }
+
+      const initCLI = new InitCLI(undefined, patterns);
+      return initCLI.run();
+    }).catch(() => {
+      writeError(TEXT.INIT_FAILED, {
+        level: CONFIG.LOG_LEVEL_ERROR,
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST
+      });
+      process.exit(CONFIG.EXIT_CODE_ERROR);
+    });
+  } else if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
     // Import and run doctor CLI
     import(CONFIG.CLI_DOCTOR_MODULE).then(({ DoctorCLI }) => {
       const doctor = new DoctorCLI(args[1]);
@@ -128,7 +153,7 @@ if (isMainModule) {
   } else {
     // Run MCP server normally
     main().catch(() => {
-      writeError(TEXT.ERROR_INVALID_CONFIG, { 
+      writeError(TEXT.ERROR_INVALID_CONFIG, {
         level: CONFIG.LOG_LEVEL_ERROR,
         code: CONFIG.ERROR_CODE_INVALID_REQUEST
       });

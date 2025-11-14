@@ -306,6 +306,7 @@ export const TEXT = {
   
   // CLI commands
   CLI_COMMAND_DOCTOR: 'doctor',
+  CLI_COMMAND_INIT: 'init',
   
   // Doctor CLI help text
   DOCTOR_HELP_HEADER: 'MCP Secrets Vault - Doctor CLI',
@@ -396,7 +397,35 @@ export const TEXT = {
   TOOL_QUERY_AUDIT_PAGE_SIZE_DESC: 'Optional: Page size (default: 50, max: 500)',
   
   // Validation messages
-  VALIDATION_NON_EMPTY_STRING: '{fieldName} must be a non-empty string'
+  VALIDATION_NON_EMPTY_STRING: '{fieldName} must be a non-empty string',
+
+  // .env file loader messages
+  ENV_LOADER_FILES_LOADED: 'Loaded {count} .env file(s)',
+  ENV_LOADER_LOADED_FILE: 'Loaded: {file}',
+  ENV_LOADER_PARSED_VARS: 'Parsed {count} variable(s) from {file}',
+  ENV_LOADER_ERROR_READING: 'Error reading {file}: {error}',
+  ENV_LOADER_GIT_WARNING: 'WARNING: .env files should be gitignored',
+  ENV_LOADER_TRACKED_FILE: 'File {file} is tracked by git',
+
+  // Auto-discovery messages
+  DISCOVER_SCANNING_ENV: 'Scanning environment variables with pattern: {pattern}',
+  DISCOVER_FOUND_SECRETS: 'Found {count} secret(s) matching patterns',
+  DISCOVER_NO_SECRETS_FOUND: 'No secrets found matching the specified patterns',
+  DISCOVER_PATTERN_INVALID: 'Invalid discovery pattern: {pattern}',
+  DISCOVER_MAX_SECRETS_EXCEEDED: 'Too many secrets discovered ({count}). Maximum: {max}',
+  DISCOVER_GENERATING_CONFIG: 'Generating configuration template...',
+  DISCOVER_CONFIG_WRITTEN: 'Configuration written to: {path}',
+  DISCOVER_CONFIG_EXISTS: 'Configuration file already exists: {path}',
+
+  // Init command messages
+  INIT_HEADER: 'MCP Secrets Vault - Configuration Initializer',
+  INIT_CREATING_CONFIG: 'Creating vault.config.json...',
+  INIT_SUCCESS: 'Configuration file created successfully',
+  INIT_FAILED: 'Failed to create configuration file',
+  INIT_FILE_EXISTS: 'Configuration file already exists',
+  INIT_DISCOVERED_SECRETS: 'Discovered {count} secret(s) from environment',
+  INIT_NO_PATTERNS_PROVIDED: 'No discovery patterns provided. Use --discover-env flag',
+  INIT_HELP_TEXT: 'Initialize vault.config.json with auto-discovered secrets'
 } as const;
 
 export type TextKey = keyof typeof TEXT;
