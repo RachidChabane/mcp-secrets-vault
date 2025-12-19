@@ -111,15 +111,51 @@ const isMainModule = process.argv[1]?.endsWith(CONFIG.INDEX_JS_SUFFIX) ||
                      import.meta.url === `${CONFIG.FILE_URL_SCHEME}${process.argv[1]}`;
 
 if (isMainModule) {
-  // Check if running doctor command
+  // Check if running a CLI command
   const args = process.argv.slice(2);
-  if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
+  const command = args[0];
+
+  if (command === TEXT.CLI_COMMAND_DOCTOR) {
     // Import and run doctor CLI
     import(CONFIG.CLI_DOCTOR_MODULE).then(({ DoctorCLI }) => {
       const doctor = new DoctorCLI(args[1]);
       return doctor.run();
     }).catch(() => {
       writeError(TEXT.DOCTOR_CLI_FAILED, {
+        level: CONFIG.LOG_LEVEL_ERROR,
+        code: CONFIG.ERROR_CODE_INVALID_REQUEST
+      });
+      process.exit(CONFIG.EXIT_CODE_ERROR);
+    });
+  } else if (command === 'discover-env') {
+    // Import and run discover-env CLI
+    import('./cli/discover-env.js').then(({ DiscoverEnvCLI }) => {
+      const cli = new DiscoverEnvCLI();
+      
+      // Parse discover-env specific arguments
+      const options: any = {
+        patterns: [],
+        merge: false
+      };
+
+      for (let i = 1; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === '--patterns' && i + 1 < args.length) {
+          options.patterns = args[++i].split(',').map((p: string) => p.trim());
+        } else if (arg === '--config' && i + 1 < args.length) {
+          options.configPath = args[++i];
+        } else if (arg === '--output' && i + 1 < args.length) {
+          options.outputPath = args[++i];
+        } else if (arg === '--max-secrets' && i + 1 < args.length) {
+          options.maxSecrets = parseInt(args[++i], 10);
+        } else if (arg === '--merge') {
+          options.merge = true;
+        }
+      }
+
+      return cli.run(options);
+    }).catch((error: any) => {
+      writeError(`Discovery failed: ${error.message}`, {
         level: CONFIG.LOG_LEVEL_ERROR,
         code: CONFIG.ERROR_CODE_INVALID_REQUEST
       });
