@@ -113,7 +113,11 @@ const isMainModule = process.argv[1]?.endsWith(CONFIG.INDEX_JS_SUFFIX) ||
 if (isMainModule) {
   // Check if running doctor command
   const args = process.argv.slice(2);
-  if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
+  if (args[0] === '--version') {
+    // Print version and exit
+    console.log(`${CONFIG.SERVER_NAME} v${CONFIG.VERSION}`);
+    process.exit(CONFIG.EXIT_CODE_SUCCESS);
+  } else if (args[0] === TEXT.CLI_COMMAND_DOCTOR) {
     // Import and run doctor CLI
     import(CONFIG.CLI_DOCTOR_MODULE).then(({ DoctorCLI }) => {
       const doctor = new DoctorCLI(args[1]);
@@ -128,7 +132,7 @@ if (isMainModule) {
   } else {
     // Run MCP server normally
     main().catch(() => {
-      writeError(TEXT.ERROR_INVALID_CONFIG, { 
+      writeError(TEXT.ERROR_INVALID_CONFIG, {
         level: CONFIG.LOG_LEVEL_ERROR,
         code: CONFIG.ERROR_CODE_INVALID_REQUEST
       });
